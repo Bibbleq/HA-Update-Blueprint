@@ -25,11 +25,12 @@ This document describes the changes made to `auto_update_scheduled.yaml` to add 
 - **Description:** When enabled, updates containing "Breaking changes" in their release notes will be skipped
 - **Default:** False (disabled)
 - **Behavior:**
-  - Before each update is installed, the release notes are checked for "breaking change" keywords
-  - Searches for both "breaking change" and "breaking-change" (case-insensitive)
+  - Before each update is installed, both the release summary and release notes are checked for "breaking change" keywords
+  - Searches in both `release_summary` and `release_notes` attributes
+  - Checks for multiple variations: "breaking change", "breaking-change", and "breaking changes" (case-insensitive)
   - If breaking changes are found and the option is enabled, the update is skipped
   - Skipped updates are logged and tracked in the `skipped_updates` variable
-  - This check is applied to all update types: generic, firmware, core, and OS updates
+  - This check is applied to all update types: generic, firmware, core, OS updates, and remaining updates
 
 ### 3. Mobile Notifications
 **Location:** New section `mobile_notification_section` (before `telegram_section`)
@@ -127,6 +128,6 @@ Updates only when John is home, skip breaking changes, and send all notification
 
 - All new features are optional and disabled by default
 - Existing automations will continue to work without modification
-- The breaking changes check uses the `release_summary` attribute from update entities
+- The breaking changes check uses both `release_summary` and `release_notes` attributes from update entities for comprehensive detection
 - Mobile notifications use the standard Home Assistant notify service pattern
 - Person state check uses the standard "home" state for person entities
