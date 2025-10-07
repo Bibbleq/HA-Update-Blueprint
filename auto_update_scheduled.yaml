@@ -888,7 +888,7 @@ action:
       - condition: template
         value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
       - condition: template
-        value_template: '{{ is_state('input_person_home_entity.state', 'home') }}'
+        value_template: "{{ is_state('input_person_home_entity.state', 'home') }}"
       - condition: template
         value_template: '{{ not is_state(input_person_home_entity | first, "home") }}'
     then:
