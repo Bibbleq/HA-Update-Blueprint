@@ -426,8 +426,10 @@ blueprint:
         notification_mobile_device:
           name: Mobile device to notify
           description: >
-            Select the mobile device or notify service to send notifications to.
-            Example: mobile_app_phone_name or notify.mobile_app_phone_name
+            Enter the notify service name (without the 'notify.' prefix).
+            
+            Example: If your notify service is 'notify.mobile_app_my_phone', 
+            enter just: mobile_app_my_phone
           default: ""
           selector:
             text:
