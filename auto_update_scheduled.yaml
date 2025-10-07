@@ -136,6 +136,17 @@ blueprint:
                 - binary_sensor
                 - switch
 
+        person_home_entity:
+          name: Person must be home (optional)
+          description: >
+            Select a person entity. Updates will only proceed if this person is at home.
+            Leave empty to disable this check.
+          default: []
+          selector:
+            entity:
+              multiple: false
+              domain: person
+
     what_section:
       name: What (optional)
       icon: mdi:update
@@ -268,6 +279,15 @@ blueprint:
               multiple: true
               domain: update
 
+        skip_breaking_changes:
+          name: Skip updates with breaking changes
+          description: >
+            When enabled, updates that contain "Breaking changes" in their release notes will be skipped.
+            This helps prevent automatic installation of updates that might require manual configuration changes.
+          default: false
+          selector:
+            boolean:
+
     backup_section:
       name: Backup (optional)
       icon: mdi:backup-restore
@@ -390,6 +410,29 @@ blueprint:
           default: []
           selector:
             action: {}
+
+    mobile_notification_section:
+      name: Mobile notifications (optional)
+      icon: mdi:cellphone-message
+      description: Send notifications to a mobile device about updates and reboots
+      collapsed: true
+      input:
+        notification_mobile_enable:
+          name: Enable mobile notifications
+          default: false
+          selector:
+            boolean:
+
+        notification_mobile_device:
+          name: Mobile device to notify
+          description: >
+            Enter the notify service name (without the 'notify.' prefix).
+            
+            Example: If your notify service is 'notify.mobile_app_my_phone', 
+            enter just: mobile_app_my_phone
+          default: ""
+          selector:
+            text:
 
     telegram_section:
       name: Telegram notifications (optional)
@@ -568,6 +611,7 @@ trigger_variables:
   input_update_inclusion_entity_list: !input update_inclusion_entity_list
   input_update_inclusion_entity_searchfilter: !input update_inclusion_entity_searchfilter
   input_update_process_started_entity: !input update_process_started_entity
+  input_person_home_entity: !input person_home_entity
 
 trigger:
   - id: HA Schedule based
@@ -644,12 +688,22 @@ condition:
         entity_id: !input pause_entities
         state: 'off'
 
+  - condition: or
+    conditions:
+      - "{{ input_person_home_entity | default([]) | list | count | int(0) < 1 }}"
+      - condition: state
+        entity_id: !input person_home_entity
+        state: 'home'
+
 variables:
   input_verbose_logging_bool: !input verbose_logging_bool
   input_core_os_update_mode: !input core_os_update_mode
   input_firmware_update_mode: !input firmware_update_mode
   input_general_update_mode: !input general_update_mode
   input_update_inclusion_mode: !input update_inclusion_mode
+  input_skip_breaking_changes: !input skip_breaking_changes
+  input_notification_mobile_enable: !input notification_mobile_enable
+  input_notification_mobile_device: !input notification_mobile_device
   input_notification_telegram_enable: !input notification_telegram_enable
   input_notification_telegram_target_id: !input notification_telegram_target_id
   input_notification_telegram_disable_notification: !input notification_telegram_disable_notification
@@ -694,6 +748,8 @@ variables:
     {% else %}
       {{ "" }}
     {% endif %}
+  skipped_updates: []
+  applied_updates: []
 action:
   - alias: Refresh update entities
     action: homeassistant.update_entity
@@ -827,6 +883,25 @@ action:
       updates_list: '{{ updates_pending }}'
       is_there_anything_to_update: '{{ updates_pending_count > 0 }}'
 
+  - alias: Check person home status for mobile notification
+    if:
+      - condition: template
+        value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
+      - condition: template
+        value_template: '{{ input_person_home_entity | default([]) | list | count > 0 }}'
+      - condition: template
+        value_template: '{{ not is_state(input_person_home_entity | first, "home") }}'
+    then:
+      - variables:
+          log_message: "Updates cannot proceed - required person is not home"
+      - alias: Mobile app - Send person not home notification
+        action: notify.{{ input_notification_mobile_device }}
+        data:
+          title: '{{ friendly_name }} - Skipped'
+          message: '{{ log_message }}'
+        continue_on_error: true
+      - stop: "Person not home"
+
   - alias: Preparation  # Inform logbook and telegram which update automation is running
     sequence:
       - variables:
@@ -857,6 +932,18 @@ action:
                   title: '{{ telegram_title }}'
                   target: '{{ input_notification_telegram_target_id }}'
                   disable_notification: '{{ input_notification_telegram_disable_notification }}'
+                  message: '{{ log_message }}'
+      - &send_mobile_notification
+            alias: Send mobile notification
+            if:
+              - condition: template
+                value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
+                alias: Check if mobile notifications are enabled
+            then:
+              - alias: Mobile app - Send notification
+                action: notify.{{ input_notification_mobile_device }}
+                data:
+                  title: '{{ friendly_name }}'
                   message: '{{ log_message }}'
 
   - alias: Report list of updates
@@ -1089,6 +1176,24 @@ action:
                 current_update_entity_friendly_name: |
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
+            - &check_breaking_changes
+              alias: Check for breaking changes
+              sequence:
+                - variables:
+                    has_breaking_changes: >
+                      {% set release_notes = state_attr(current_update_entity, 'release_summary') | default('') | lower %}
+                      {{ input_skip_breaking_changes and ('breaking change' in release_notes or 'breaking-change' in release_notes) }}
+                - if: '{{ has_breaking_changes }}'
+                  then:
+                    - variables:
+                        log_message: "Skipping `{{ current_update_entity_friendly_name }}` - contains breaking changes"
+                        skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
+                    - *logbook_update
+                    - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                      then:
+                        - *send_telegram_message
+                    - stop: "Skipping update with breaking changes"
+
             - &log_updating
               alias: Log updating
               sequence:
@@ -1119,6 +1224,7 @@ action:
                   then:
                     - variables:
                         log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
+                        applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
                     - *logbook_update
                     - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                       then:
@@ -1176,7 +1282,11 @@ action:
                     | map(attribute='entity_id')
                     | list
                   }}
+                current_update_entity: '{{ updates_pending[0] }}'
+                current_update_entity_friendly_name: |
+                  {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
+            - *check_breaking_changes
             - *log_updating
             - *update_install
             - *update_wait
@@ -1226,7 +1336,11 @@ action:
                     | map(attribute='entity_id')
                     | list
                   }}
+                current_update_entity: '{{ updates_pending[0] }}'
+                current_update_entity_friendly_name: |
+                  {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
+            - *check_breaking_changes
             - *log_updating
             - *update_install
             - *update_wait
@@ -1276,7 +1390,11 @@ action:
                     | map(attribute='entity_id')
                     | list
                   }}
+                current_update_entity: '{{ updates_pending[0] }}'
+                current_update_entity_friendly_name: |
+                  {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
+            - *check_breaking_changes
             - *log_updating
             - *update_install
             - *update_wait
@@ -1467,6 +1585,17 @@ action:
                 then:
                   - *send_telegram_message
 
+              - alias: Mobile app - Send reboot notification
+                if:
+                  - condition: template
+                    value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
+                then:
+                  - action: notify.{{ input_notification_mobile_device }}
+                    data:
+                      title: '{{ friendly_name }} - Rebooting'
+                      message: 'Home Assistant is restarting now ({{ input_restart_type }})'
+                    continue_on_error: true
+
               - alias: "Wait 15 seconds to deliver the telegram message."
                 delay:
                   seconds: 15
@@ -1499,6 +1628,35 @@ action:
       - action: input_boolean.turn_off
         target:
           entity_id: !input update_process_started_entity
+
+  - alias: Mobile notification summary
+    if:
+      - condition: template
+        value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
+    then:
+      - variables:
+          log_message: >
+            Update Summary:
+            {% if applied_updates | count > 0 %}
+            Applied updates ({{ applied_updates | count }}):
+            {% for update in applied_updates %}  - {{ update }}
+            {% endfor %}
+            {% else %}No updates applied.
+            {% endif %}
+            {% if skipped_updates | count > 0 %}
+            Skipped updates ({{ skipped_updates | count }}):
+            {% for update in skipped_updates %}  - {{ update }} (breaking changes)
+            {% endfor %}
+            {% endif %}
+            {% if pending_restart_items_count is defined and pending_restart_items_count > 0 %}
+            System restart: {% if input_restart_type != "no-restart" %}Performed{% else %}Required (not automatic){% endif %}
+            {% endif %}
+      - alias: Mobile app - Send summary notification
+        action: notify.{{ input_notification_mobile_device }}
+        data:
+          title: '{{ friendly_name }} - Complete'
+          message: '{{ log_message }}'
+        continue_on_error: true
 
   - alias: Done  # All done!
     sequence:
