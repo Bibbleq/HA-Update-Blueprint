@@ -1181,8 +1181,10 @@ action:
               sequence:
                 - variables:
                     has_breaking_changes: >
-                      {% set release_notes = state_attr(current_update_entity, 'release_summary') | default('') | lower %}
-                      {{ input_skip_breaking_changes and ('breaking change' in release_notes or 'breaking-change' in release_notes) }}
+                      {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') | lower %}
+                      {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') | lower %}
+                      {% set combined_text = release_summary ~ ' ' ~ release_notes %}
+                      {{ input_skip_breaking_changes and ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) }}
                 - if: '{{ has_breaking_changes }}'
                   then:
                     - variables:
@@ -1421,13 +1423,25 @@ action:
         data: {}
         target:
           entity_id: >-
-            {{ states.update
-            | selectattr('state', 'eq', 'on')
-            | selectattr('entity_id', 'in', updates_pending)
-            | rejectattr('entity_id', 'in', input_update_exclusions)
-            | map(attribute='entity_id')
-            | list
-            }}
+            {% set remaining = states.update
+              | selectattr('state', 'eq', 'on')
+              | selectattr('entity_id', 'in', updates_pending)
+              | rejectattr('entity_id', 'in', input_update_exclusions)
+              | list %}
+            {% if input_skip_breaking_changes %}
+              {% set filtered = namespace(list=[]) %}
+              {% for update in remaining %}
+                {% set release_summary = state_attr(update.entity_id, 'release_summary') | default('') | lower %}
+                {% set release_notes = state_attr(update.entity_id, 'release_notes') | default('') | lower %}
+                {% set combined_text = release_summary ~ ' ' ~ release_notes %}
+                {% if not ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) %}
+                  {% set filtered.list = filtered.list + [update.entity_id] %}
+                {% endif %}
+              {% endfor %}
+              {{ filtered.list }}
+            {% else %}
+              {{ remaining | map(attribute='entity_id') | list }}
+            {% endif %}
       - alias: "Update - Remaining - Wait"
         continue_on_error: true
         wait_template: >-
