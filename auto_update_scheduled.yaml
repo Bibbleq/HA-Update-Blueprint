@@ -303,9 +303,10 @@ blueprint:
         backup_timeout:
           name: Backup Timeout
           description: >-
-            Specify how much time the automation waits for the backup process.
-            We can't check wether the backup was successful.
-            Per default we wait 1 hour to finish the backup.
+            Specify the maximum time to wait for the backup process to complete.
+            The automation monitors Home Assistant's native backup entities to detect
+            when the backup finishes. If the backup doesn't complete within this timeout,
+            the automation will continue anyway. Default is 60 minutes.
           default: 60
           selector:
             number:
@@ -317,11 +318,10 @@ blueprint:
         max_backup_age:
           name: Maximum backup age (or zero, to disable) (optional)
           description:
-            This requires the [Google Drive Backup](https://github.com/sabeechen/hassio-google-drive-backup)
-            addon to be installed and configured to automatically backup, and provide
-            a sensor with the backup states. The setting only checks for the age of
-            the automatic backups from that addon, not the backups created internally
-            by this blueprint.
+            This checks the age of the most recent backup using Home Assistant's native
+            backup entities. The automation will check for any sensor with a `last_backup`
+            attribute and verify that at least one backup exists within the specified age limit.
+            This setting only validates existing backups, not the backups created by this blueprint.
           default:
             days: 0
             hours: 0
@@ -1038,11 +1038,9 @@ action:
                 seconds=temp_max_backup_age.seconds
               ).total_seconds()
             }}
-      - alias: Check existing backups uploaded
+      - alias: Check existing backup age using native HA backup entities
         continue_on_error: true
         if:
-          - '{{ not is_state("sensor.backup_state", "unknown") }}'
-          - '{{ not is_state("sensor.backup_state", "unavailable") }}'
           - '{{ input_max_backup_age_seconds > 0 }}'
         then:
           - variables:
@@ -1054,28 +1052,28 @@ action:
                   | list
                 }}
               last_backup_timestamp: '{{ last_backup_timestamp_list | max if last_backup_timestamp_list | count > 0 else None }}'
-          - alias: Check if backup state is defined
+          - alias: Check if any backup entity was found
             if: '{{ last_backup_timestamp != None }}'
             then:
-              - alias: Check age of last uploaded backup
+              - alias: Check age of last backup
                 if: >-
                   {{ as_timestamp(now()) - as_timestamp(last_backup_timestamp) > input_max_backup_age_seconds }}
                 then:
                   - variables:
-                      log_message: "Last uploaded backup is too old"
+                      log_message: "Last backup is too old"
                   - *logbook_update
                   - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
                     then:
                       - *send_telegram_message
-                  - stop: "Last uploaded backup is too old"
+                  - stop: "Last backup is too old"
             else:
               - variables:
-                  log_message: "Backup State sensor not found"
+                  log_message: "No backup entity with last_backup attribute found"
               - *logbook_update
               - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
                 then:
                   - *send_telegram_message
-              - stop: "Backup State sensor not found"
+              - stop: "No backup entity with last_backup attribute found"
       - alias: "Backup"
         continue_on_error: true
         if:
@@ -1089,35 +1087,47 @@ action:
               entity_id: "{{ input_update_process_started_entity }}"
             continue_on_error: true
           - variables:
+              input_backup_location: !input backup_location
               log_message: "Backing up Home Assistant"
           - *logbook_update
           - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
             then:
               - *send_telegram_message
 
-          - alias: "Call backup service"
+          - alias: "Call backup service with location parameter"
             action: hassio.backup_full
             data:
               compressed: true
+              location: "{{ input_backup_location }}"
             continue_on_error: true
 
           - variables:
               log_message: >
                 Backup triggered
 
-                Waiting {{ input_backup_timeout | int(60) }} minutes
+                Monitoring backup status (timeout: {{ input_backup_timeout | int(60) }} minutes)
           - *logbook_update
           - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
             then:
               - *send_telegram_message
 
-          - alias: "Wait for the backup"  # There's no sensor for when the backup finishes
-            delay:
-              minutes: "{{ input_backup_timeout | int(60) }}"
+          - alias: "Wait for backup completion using native backup entity monitoring"
+            continue_on_error: true
+            wait_template: >-
+              {% set backup_sensors = states.sensor
+                | selectattr('attributes.backup_state', 'defined')
+                | list %}
+              {% if backup_sensors | count > 0 %}
+                {{ backup_sensors | selectattr('attributes.backup_state', 'ne', 'backing_up') | list | count == backup_sensors | count }}
+              {% else %}
+                false
+              {% endif %}
+            timeout: "{{ input_backup_timeout | int(60) * 60 }}"
+            continue_on_timeout: true
 
           - variables:
               log_message: >
-                Backup Wait time finished.
+                Backup {% if wait.completed | default(false) %}completed successfully{% else %}timeout reached, continuing anyway{% endif %}.
 
                 Continuing...
           - *logbook_update
