@@ -1,6 +1,0 @@
-group:
-  pets:
-    name: Pets
-    entities:
-      - person.dory
-      - person.skal
