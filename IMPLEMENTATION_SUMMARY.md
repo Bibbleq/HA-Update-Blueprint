@@ -23,7 +23,7 @@ This document describes the changes made to `auto_update_scheduled.yaml` to add 
 - **Input Name:** `skip_breaking_changes`
 - **Type:** Boolean toggle
 - **Description:** When enabled, updates containing "Breaking changes" in their release notes will be skipped
-- **Default:** False (disabled)
+- **Default:** True (enabled) - Changed in v2025.10.3 for safety
 - **Behavior:**
   - Before each update is installed, both the release summary and release notes are checked for "breaking change" keywords
   - Searches in both `release_summary` and `release_notes` attributes
@@ -31,6 +31,8 @@ This document describes the changes made to `auto_update_scheduled.yaml` to add 
   - If breaking changes are found and the option is enabled, the update is skipped
   - Skipped updates are logged and tracked in the `skipped_updates` variable
   - This check is applied to all update types: generic, firmware, core, OS updates, and remaining updates
+
+**Breaking Change (v2025.10.3):** This option now defaults to `true` (enabled) for safety. If you want to continue automatically applying all updates including breaking changes, you must explicitly set this to `false`.
 
 ### 3. Mobile Notifications
 **Location:** New section `mobile_notification_section` (before `telegram_section`)

@@ -36,6 +36,12 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.3
+
+    **Breaking Change:** The `skip_breaking_changes` option now defaults to `true` (enabled).
+    If you want to continue automatically applying all updates including breaking changes, 
+    you must explicitly set this to `false` in your automation configuration.
+
     ## v2025.10.2
 
     ## Attention:
@@ -289,7 +295,9 @@ blueprint:
           description: >
             When enabled, updates that contain "Breaking changes" in their release notes will be skipped.
             This helps prevent automatic installation of updates that might require manual configuration changes.
-          default: false
+            
+            Default is enabled for safety. Disable this if you want to automatically apply all updates including those with breaking changes.
+          default: true
           selector:
             boolean:
 
