@@ -36,7 +36,7 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
-    ## v2025.10.1
+    ## v2025.10.2
 
     ## Attention:
 
@@ -695,7 +695,7 @@ condition:
 
   - condition: or
     conditions:
-      - "{{ input_person_home_entity | default([]) | list | count | int(0) < 1 }}"
+      - "{{ input_person_home_entity | string | length == 0 }}"
       - condition: state
         entity_id: !input person_home_entity
         state: 'home'
@@ -893,9 +893,9 @@ action:
       - condition: template
         value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
       - condition: template
-        value_template: '{{ input_person_home_entity | default([]) | list | count > 0 }}'
+        value_template: '{{ input_person_home_entity | string | length > 0 }}'
       - condition: template
-        value_template: '{{ not is_state(input_person_home_entity | first, "home") }}'
+        value_template: '{{ not is_state(input_person_home_entity, "home") }}'
     then:
       - variables:
           log_message: "Updates cannot proceed - required person is not home"
