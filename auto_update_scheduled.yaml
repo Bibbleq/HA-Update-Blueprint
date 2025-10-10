@@ -674,7 +674,7 @@ condition:
         conditions:
           - condition: trigger
             id: "HA Start"
-          - '{{ input_update_process_started_entity | default([]) | count == 1 }}'
+          - '{{ input_update_process_started_entity | string | length > 0 }}'
           - condition: state
             entity_id: !input update_process_started_entity
             state: "on"
@@ -731,8 +731,8 @@ variables:
     {% endfor %}
   is_resume_after_restart: >
     {{
-      input_update_process_started_entity | default([]) | count == 1 and
-      is_state(input_update_process_started_entity | first, "on")
+      input_update_process_started_entity | string | length > 0 and
+      is_state(input_update_process_started_entity, "on")
     }}
   friendly_name: |
     {% set friendly_name_tmp = state_attr(this.entity_id, "friendly_name") | default("") %}
@@ -980,8 +980,7 @@ action:
 
   - alias: Set ON helper flag
     if:
-      - '{{ input_update_process_started_entity | default([]) | count > 0 }}'
-      - '{{ input_update_process_started_entity[0] | string | length > 0 }}'
+      - '{{ input_update_process_started_entity | string | length > 0 }}'
       - condition: state
         entity_id: !input schedule_entity
         state: 'on'
@@ -1083,14 +1082,21 @@ action:
         continue_on_error: true
         if:
           - '{{ input_backup_bool }}'
-          - condition: state
-            entity_id: !input update_process_started_entity
-            state: 'off'
+          - condition: or
+            conditions:
+              - '{{ input_update_process_started_entity | string | length == 0 }}'
+              - condition: state
+                entity_id: !input update_process_started_entity
+                state: 'off'
         then:
-          - action: input_boolean.turn_on
-            target:
-              entity_id: "{{ input_update_process_started_entity }}"
-            continue_on_error: true
+          - alias: "Set helper entity to ON (if configured)"
+            if:
+              - '{{ input_update_process_started_entity | string | length > 0 }}'
+            then:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: "{{ input_update_process_started_entity }}"
+                continue_on_error: true
           - variables:
               input_backup_location: !input backup_location
               log_message: "Backing up Home Assistant"
@@ -1651,8 +1657,7 @@ action:
 
   - alias: Set OFF helper flag
     if:
-      - '{{ input_update_process_started_entity | default([]) | count > 0 }}'
-      - '{{ input_update_process_started_entity[0] | string | length > 0 }}'
+      - '{{ input_update_process_started_entity | string | length > 0 }}'
     then:
       - action: input_boolean.turn_off
         target:
