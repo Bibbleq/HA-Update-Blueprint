@@ -36,6 +36,14 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.3
+
+    **Critical Fix:** Fixed breaking changes detection not working correctly. The `stop` command was inside a nested sequence which only stopped that sequence, not the repeat loop, causing updates with breaking changes to be applied anyway.
+
+    **Breaking Change:** The `skip_breaking_changes` option now defaults to `true` (enabled).
+    If you want to continue automatically applying all updates including breaking changes, 
+    you must explicitly set this to `false` in your automation configuration.
+
     ## v2025.10.2
 
     ## Attention:
@@ -289,7 +297,9 @@ blueprint:
           description: >
             When enabled, updates that contain "Breaking changes" in their release notes will be skipped.
             This helps prevent automatic installation of updates that might require manual configuration changes.
-          default: false
+            
+            Default is enabled for safety. Disable this if you want to automatically apply all updates including those with breaking changes.
+          default: true
           selector:
             boolean:
 
@@ -674,7 +684,7 @@ condition:
         conditions:
           - condition: trigger
             id: "HA Start"
-          - '{{ input_update_process_started_entity | default([]) | count == 1 }}'
+          - '{{ input_update_process_started_entity | string | length > 0 }}'
           - condition: state
             entity_id: !input update_process_started_entity
             state: "on"
@@ -731,8 +741,8 @@ variables:
     {% endfor %}
   is_resume_after_restart: >
     {{
-      input_update_process_started_entity | default([]) | count == 1 and
-      is_state(input_update_process_started_entity | first, "on")
+      input_update_process_started_entity | string | length > 0 and
+      is_state(input_update_process_started_entity, "on")
     }}
   friendly_name: |
     {% set friendly_name_tmp = state_attr(this.entity_id, "friendly_name") | default("") %}
@@ -980,8 +990,7 @@ action:
 
   - alias: Set ON helper flag
     if:
-      - '{{ input_update_process_started_entity | default([]) | count > 0 }}'
-      - '{{ input_update_process_started_entity[0] | string | length > 0 }}'
+      - '{{ input_update_process_started_entity | string | length > 0 }}'
       - condition: state
         entity_id: !input schedule_entity
         state: 'on'
@@ -1083,14 +1092,21 @@ action:
         continue_on_error: true
         if:
           - '{{ input_backup_bool }}'
-          - condition: state
-            entity_id: !input update_process_started_entity
-            state: 'off'
+          - condition: or
+            conditions:
+              - '{{ input_update_process_started_entity | string | length == 0 }}'
+              - condition: state
+                entity_id: !input update_process_started_entity
+                state: 'off'
         then:
-          - action: input_boolean.turn_on
-            target:
-              entity_id: "{{ input_update_process_started_entity }}"
-            continue_on_error: true
+          - alias: "Set helper entity to ON (if configured)"
+            if:
+              - '{{ input_update_process_started_entity | string | length > 0 }}'
+            then:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: "{{ input_update_process_started_entity }}"
+                continue_on_error: true
           - variables:
               input_backup_location: !input backup_location
               log_message: "Backing up Home Assistant"
@@ -1192,24 +1208,23 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - &check_breaking_changes
-              alias: Check for breaking changes
-              sequence:
+              variables:
+                has_breaking_changes: >
+                  {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') | lower %}
+                  {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') | lower %}
+                  {% set combined_text = release_summary ~ ' ' ~ release_notes %}
+                  {{ input_skip_breaking_changes and ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) }}
+                
+            - &check_and_skip_breaking_changes
+              if: '{{ has_breaking_changes }}'
+              then:
                 - variables:
-                    has_breaking_changes: >
-                      {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') | lower %}
-                      {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') | lower %}
-                      {% set combined_text = release_summary ~ ' ' ~ release_notes %}
-                      {{ input_skip_breaking_changes and ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) }}
-                - if: '{{ has_breaking_changes }}'
+                    log_message: "Skipping `{{ current_update_entity_friendly_name }}` - contains breaking changes"
+                    skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
+                - *logbook_update
+                - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                   then:
-                    - variables:
-                        log_message: "Skipping `{{ current_update_entity_friendly_name }}` - contains breaking changes"
-                        skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
-                    - *logbook_update
-                    - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                      then:
-                        - *send_telegram_message
-                    - stop: "Skipping update with breaking changes"
+                    - *send_telegram_message
 
             - &log_updating
               alias: Log updating
@@ -1304,9 +1319,12 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - *check_breaking_changes
-            - *log_updating
-            - *update_install
-            - *update_wait
+            - *check_and_skip_breaking_changes
+            - if: '{{ not has_breaking_changes }}'
+              then:
+                - *log_updating
+                - *update_install
+                - *update_wait
 
   - alias: Update core
     if:
@@ -1358,9 +1376,12 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - *check_breaking_changes
-            - *log_updating
-            - *update_install
-            - *update_wait
+            - *check_and_skip_breaking_changes
+            - if: '{{ not has_breaking_changes }}'
+              then:
+                - *log_updating
+                - *update_install
+                - *update_wait
 
   - alias: Update OS
     if:
@@ -1412,9 +1433,12 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - *check_breaking_changes
-            - *log_updating
-            - *update_install
-            - *update_wait
+            - *check_and_skip_breaking_changes
+            - if: '{{ not has_breaking_changes }}'
+              then:
+                - *log_updating
+                - *update_install
+                - *update_wait
 
   - alias: Update - Remaining  # Update all remaining items => this chaches up if some update item was left behind
     continue_on_error: true
@@ -1651,8 +1675,7 @@ action:
 
   - alias: Set OFF helper flag
     if:
-      - '{{ input_update_process_started_entity | default([]) | count > 0 }}'
-      - '{{ input_update_process_started_entity[0] | string | length > 0 }}'
+      - '{{ input_update_process_started_entity | string | length > 0 }}'
     then:
       - action: input_boolean.turn_off
         target:
