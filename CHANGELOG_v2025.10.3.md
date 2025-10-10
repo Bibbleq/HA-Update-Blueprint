@@ -1,7 +1,25 @@
 # Changelog v2025.10.3
 
 ## Summary
-This release fixes two critical issues related to backup creation and breaking changes detection.
+This release fixes three critical issues related to backup creation and breaking changes detection.
+
+## 🔴 Critical Fix: Breaking Changes Detection Not Working
+
+**Issue:** Even when `skip_breaking_changes` was enabled, updates with breaking changes were still being applied.
+
+**Root Cause:** The `stop` command in the breaking changes check was inside a nested `sequence` block created by the YAML anchor. When `stop` was called, it only stopped the nested sequence, not the parent repeat loop, allowing the update steps to continue executing.
+
+**Fix:** Restructured the breaking changes check to:
+1. Set `has_breaking_changes` variable (no nested sequence)
+2. Log skip message if breaking changes found
+3. Use conditional `if: '{{ not has_breaking_changes }}'` around update steps
+
+This ensures that when breaking changes are detected, the update steps (`log_updating`, `update_install`, `update_wait`) are never executed.
+
+**Impact:**
+- ✅ Breaking changes detection now works correctly
+- ✅ Updates with breaking changes are properly skipped when enabled
+- ✅ No configuration changes required
 
 ## 🔴 Breaking Change
 
