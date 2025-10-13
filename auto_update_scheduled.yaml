@@ -36,6 +36,12 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.4
+
+    **New Feature:** Added What-If Mode (dry run) for safely testing automation configuration without making any changes.
+    Enable `whatif_mode: true` to preview what updates would be installed and what would be skipped, with all notifications working normally.
+    Perfect for testing before production use!
+
     ## v2025.10.3
 
     **Critical Fix:** Fixed breaking changes detection not working correctly. The `stop` command was inside a nested sequence which only stopped that sequence, not the repeat loop, causing updates with breaking changes to be applied anyway.
