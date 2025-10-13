@@ -783,6 +783,7 @@ variables:
     {% endif %}
   skipped_updates: []
   applied_updates: []
+  processed_updates: []
 action:
   - alias: Refresh update entities
     action: homeassistant.update_entity
@@ -1211,6 +1212,7 @@ action:
                   | rejectattr('entity_id', 'in', os_update_entity)
                   | rejectattr('entity_id', 'in', firmware_update_entities)
                   | rejectattr('entity_id', 'in', input_update_exclusions)
+                  | rejectattr('entity_id', 'in', processed_updates)
                   | map(attribute='entity_id')
                   | list | count | int(0) ) > 0
                 }}
@@ -1227,6 +1229,7 @@ action:
                     | rejectattr('entity_id', 'in', os_update_entity)
                     | rejectattr('entity_id', 'in', firmware_update_entities)
                     | rejectattr('entity_id', 'in', input_update_exclusions)
+                    | rejectattr('entity_id', 'in', processed_updates)
                     | map(attribute='entity_id')
                     | list
                   }}
@@ -1248,65 +1251,69 @@ action:
                 - variables:
                     log_message: "Skipping `{{ current_update_entity_friendly_name }}` - contains breaking changes"
                     skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
+                    processed_updates: '{{ processed_updates + [current_update_entity] }}'
                 - *logbook_update
                 - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                   then:
                     - *send_telegram_message
 
-            - &log_updating
-              alias: Log updating
-              sequence:
-                - variables:
-                    log_message: "{% if input_whatif_mode %}[WHAT-IF] Would update{% else %}Updating{% endif %} `{{ current_update_entity_friendly_name }}`..."
-                - *logbook_update
-                - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                  then:
-                    - *send_telegram_message
-
-            - &update_install
-              alias: "Update - Install"
-              if: '{{ not input_whatif_mode }}'
+            - if: '{{ not has_breaking_changes }}'
               then:
-                - continue_on_error: true
-                  action: update.install
-                  data: {}
-                  target:
-                    entity_id: '{{ current_update_entity }}'
-
-            - &update_wait
-              alias: "Update - Wait"
-              sequence:
-                - if: '{{ input_whatif_mode }}'
-                  then:
+                - &log_updating
+                  alias: Log updating
+                  sequence:
                     - variables:
-                        log_message: '`{{ current_update_entity_friendly_name }}` would be updated successfully'
-                        applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
+                        log_message: "{% if input_whatif_mode %}[WHAT-IF] Would update{% else %}Updating{% endif %} `{{ current_update_entity_friendly_name }}`..."
                     - *logbook_update
                     - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                       then:
                         - *send_telegram_message
-                  else:
-                    - alias: Wait
-                      continue_on_error: true
-                      wait_template: "{{ is_state(current_update_entity, 'off') }}"
-                      continue_on_timeout: true
-                      timeout: !input update_timeout
-                    - if: '{{ wait.completed }}'
+
+                - &update_install
+                  alias: "Update - Install"
+                  if: '{{ not input_whatif_mode }}'
+                  then:
+                    - continue_on_error: true
+                      action: update.install
+                      data: {}
+                      target:
+                        entity_id: '{{ current_update_entity }}'
+
+                - &update_wait
+                  alias: "Update - Wait"
+                  sequence:
+                    - if: '{{ input_whatif_mode }}'
                       then:
                         - variables:
-                            log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
+                            log_message: '`{{ current_update_entity_friendly_name }}` would be updated successfully'
                             applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
+                            processed_updates: '{{ processed_updates + [current_update_entity] }}'
                         - *logbook_update
                         - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                           then:
                             - *send_telegram_message
                       else:
-                        - variables:
-                            log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
-                        - *logbook_update
-                        - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                        - alias: Wait
+                          continue_on_error: true
+                          wait_template: "{{ is_state(current_update_entity, 'off') }}"
+                          continue_on_timeout: true
+                          timeout: !input update_timeout
+                        - if: '{{ wait.completed }}'
                           then:
-                            - *send_telegram_message
+                            - variables:
+                                log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
+                                applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
+                            - *logbook_update
+                            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                              then:
+                                - *send_telegram_message
+                          else:
+                            - variables:
+                                log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
+                            - *logbook_update
+                            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                              then:
+                                - *send_telegram_message
 
   - alias: Devices firmware
     if:
@@ -1334,6 +1341,7 @@ action:
                   | selectattr('state', 'eq', 'on')
                   | selectattr('entity_id', 'in', firmware_update_entities)
                   | rejectattr('entity_id', 'in', input_update_exclusions)
+                  | rejectattr('entity_id', 'in', processed_updates)
                   | map(attribute='entity_id')
                   | list | count | int(0) ) > 0
                 }}
@@ -1350,6 +1358,7 @@ action:
                   {{ states.update
                     | selectattr('state', 'eq', 'on')
                     | selectattr('entity_id', 'in', firmware_update_entities)
+                    | rejectattr('entity_id', 'in', processed_updates)
                     | map(attribute='entity_id')
                     | list
                   }}
@@ -1390,6 +1399,7 @@ action:
                   | selectattr('state', 'eq', 'on')
                   | selectattr('entity_id', 'in', core_update_entity)
                   | rejectattr('entity_id', 'in', input_update_exclusions)
+                  | rejectattr('entity_id', 'in', processed_updates)
                   | map(attribute='entity_id')
                   | list | count | int(0) ) > 0
                 }}
@@ -1407,6 +1417,7 @@ action:
                     | selectattr('state', 'eq', 'on')
                     | selectattr('entity_id', 'in', core_update_entity)
                     | rejectattr('entity_id', 'in', input_update_exclusions)
+                    | rejectattr('entity_id', 'in', processed_updates)
                     | map(attribute='entity_id')
                     | list
                   }}
@@ -1447,6 +1458,7 @@ action:
                   | selectattr('state', 'eq', 'on')
                   | selectattr('entity_id', 'in', os_update_entity)
                   | rejectattr('entity_id', 'in', input_update_exclusions)
+                  | rejectattr('entity_id', 'in', processed_updates)
                   | map(attribute='entity_id')
                   | list | count | int(0) ) > 0
                 }}
@@ -1464,6 +1476,7 @@ action:
                     | selectattr('state', 'eq', 'on')
                     | selectattr('entity_id', 'in', os_update_entity)
                     | rejectattr('entity_id', 'in', input_update_exclusions)
+                    | rejectattr('entity_id', 'in', processed_updates)
                     | map(attribute='entity_id')
                     | list
                   }}
