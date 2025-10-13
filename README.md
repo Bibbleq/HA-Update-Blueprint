@@ -17,6 +17,13 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
 
 ### Safety & Control Features
 
+- **🧪 What-If Mode (Dry Run)**
+  - Test the automation safely without making any changes
+  - Shows what updates would be installed and what would be skipped
+  - All notifications and logging work normally
+  - No backups are created, no updates installed, no restarts performed
+  - Perfect for testing automation configuration before using it in production
+
 - **🛡️ Breaking Changes Protection** (Default: Enabled)
   - Automatically detects and skips updates containing breaking changes
   - Searches both release summary and release notes for breaking change indicators
@@ -121,6 +128,7 @@ Minimal setup for safe automatic updates:
 schedule_entity: schedule.updates_schedule
 
 # Safety Features
+whatif_mode: false                    # Dry-run mode for testing (default: false)
 skip_breaking_changes: true           # Skip updates with breaking changes (default)
 backup_bool: true                     # Create backup before updates (default)
 person_home_entity: person.john_doe   # Only update when John is home
@@ -199,9 +207,48 @@ update_types_exclusions:
 - Exclude firmware updates (manual control preferred)
 - Still get core and addon updates automatically
 
+### Example 4: What-If Mode (Testing)
+
+```yaml
+whatif_mode: true
+skip_breaking_changes: true
+backup_bool: true
+notification_mobile_enable: true
+notification_mobile_device: mobile_app_my_phone
+```
+
+**Benefits:**
+- ✅ Test automation without making any changes
+- ✅ See what updates would be applied
+- ✅ See what would be skipped due to breaking changes
+- ✅ Receive notifications showing planned actions
+- ✅ No backups created, no updates installed, no restarts
+- ✅ Perfect for validating configuration before production use
+
+**Use Case:**
+- Testing new automation configuration
+- Validating exclusion rules
+- Checking which updates are pending
+- Safe exploration of update behavior
+
 ## 📋 Version History
 
-### v2025.10.3 (Current)
+### v2025.10.4 (Current)
+
+**✨ New Feature:**
+- Added What-If Mode (dry run) for safe automation testing
+- Preview updates without making any changes
+- See what would be installed and what would be skipped
+- All notifications work normally with "[WHAT-IF]" prefix
+- No backups, updates, or restarts performed in What-If mode
+
+**📚 Documentation:**
+- Added comprehensive What-If Mode documentation
+- New usage example for What-If Mode testing
+- Added test scenario for What-If Mode
+- Updated tips and best practices
+
+### v2025.10.3
 
 **🔴 Critical Fixes:**
 - Fixed breaking changes detection not working correctly
@@ -285,6 +332,23 @@ All changes maintain backward compatibility except for the `skip_breaking_change
 - ✅ Mobile notification sent (if enabled)
 - ✅ Automation exits gracefully
 
+### Scenario 4: What-If Mode Testing
+**Setup:**
+- `whatif_mode`: true
+- `backup_bool`: true
+- `skip_breaking_changes`: true
+- Multiple updates available (some with breaking changes)
+- Mobile notifications enabled
+
+**Expected:**
+- ✅ No backup is created (but log shows it would be)
+- ✅ No updates are installed (but log shows what would be)
+- ✅ Updates with breaking changes shown as "would be skipped"
+- ✅ Regular updates shown as "would be updated"
+- ✅ No system restart occurs (but log shows it would if needed)
+- ✅ Notifications show "[WHAT-IF]" prefix
+- ✅ Summary shows what would happen without making changes
+
 ## 🤝 Contributing
 
 This is a fork/modification of the original blueprint by [edwardtfn](https://github.com/edwardtfn). 
@@ -306,13 +370,14 @@ This is a fork/modification of the original blueprint by [edwardtfn](https://git
 ## 💡 Tips & Best Practices
 
 1. **Start Conservative:** Use the default safe settings initially
-2. **Test First:** Try in a development environment before production
-3. **Enable Notifications:** Stay informed about update activities
-4. **Review Logs:** Check Home Assistant logbook after automation runs
-5. **Have Backups:** Always maintain external backups beyond the automation's built-in backup
-6. **Monitor Breaking Changes:** Review what updates were skipped and apply manually when ready
-7. **Use Helper Entity:** For better control and resume functionality
-8. **Schedule Wisely:** Choose low-usage time windows for updates
+2. **Test First:** Use What-If mode (`whatif_mode: true`) to safely test your configuration before production
+3. **Validate Configuration:** Run the automation in What-If mode to see what would be updated and skipped
+4. **Enable Notifications:** Stay informed about update activities
+5. **Review Logs:** Check Home Assistant logbook after automation runs
+6. **Have Backups:** Always maintain external backups beyond the automation's built-in backup
+7. **Monitor Breaking Changes:** Review what updates were skipped and apply manually when ready
+8. **Use Helper Entity:** For better control and resume functionality
+9. **Schedule Wisely:** Choose low-usage time windows for updates
 
 ## ⚠️ Known Limitations
 
@@ -339,4 +404,4 @@ If you find this blueprint useful, consider supporting the original author:
 
 ---
 
-**Last Updated:** October 2025 (v2025.10.3)
+**Last Updated:** October 2025 (v2025.10.4)
