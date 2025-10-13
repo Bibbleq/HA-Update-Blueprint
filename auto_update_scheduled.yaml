@@ -36,6 +36,13 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.5
+
+    **Critical Bug Fixes:** Fixed What-If Mode issues from v2025.10.4:
+    - Fixed infinite loop when What-If mode was enabled
+    - Fixed updates still being installed despite What-If mode being enabled
+    What-If mode now works correctly as a true dry run with no changes made.
+
     ## v2025.10.4
 
     **New Feature:** Added What-If Mode (dry run) for safely testing automation configuration without making any changes.
@@ -1303,6 +1310,7 @@ action:
                             - variables:
                                 log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
                                 applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
+                                processed_updates: '{{ processed_updates + [current_update_entity] }}'
                             - *logbook_update
                             - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                               then:
@@ -1310,6 +1318,7 @@ action:
                           else:
                             - variables:
                                 log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
+                                processed_updates: '{{ processed_updates + [current_update_entity] }}'
                             - *logbook_update
                             - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                               then:
@@ -1510,29 +1519,31 @@ action:
 
       - alias: "Update - Remaining - Install"
         continue_on_error: true
-        service: update.install
-        data: {}
-        target:
-          entity_id: >-
-            {% set remaining = states.update
-              | selectattr('state', 'eq', 'on')
-              | selectattr('entity_id', 'in', updates_pending)
-              | rejectattr('entity_id', 'in', input_update_exclusions)
-              | list %}
-            {% if input_skip_breaking_changes %}
-              {% set filtered = namespace(list=[]) %}
-              {% for update in remaining %}
-                {% set release_summary = state_attr(update.entity_id, 'release_summary') | default('') | lower %}
-                {% set release_notes = state_attr(update.entity_id, 'release_notes') | default('') | lower %}
-                {% set combined_text = release_summary ~ ' ' ~ release_notes %}
-                {% if not ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) %}
-                  {% set filtered.list = filtered.list + [update.entity_id] %}
+        if: '{{ not input_whatif_mode }}'
+        then:
+          - service: update.install
+            data: {}
+            target:
+              entity_id: >-
+                {% set remaining = states.update
+                  | selectattr('state', 'eq', 'on')
+                  | selectattr('entity_id', 'in', updates_pending)
+                  | rejectattr('entity_id', 'in', input_update_exclusions)
+                  | list %}
+                {% if input_skip_breaking_changes %}
+                  {% set filtered = namespace(list=[]) %}
+                  {% for update in remaining %}
+                    {% set release_summary = state_attr(update.entity_id, 'release_summary') | default('') | lower %}
+                    {% set release_notes = state_attr(update.entity_id, 'release_notes') | default('') | lower %}
+                    {% set combined_text = release_summary ~ ' ' ~ release_notes %}
+                    {% if not ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) %}
+                      {% set filtered.list = filtered.list + [update.entity_id] %}
+                    {% endif %}
+                  {% endfor %}
+                  {{ filtered.list }}
+                {% else %}
+                  {{ remaining | map(attribute='entity_id') | list }}
                 {% endif %}
-              {% endfor %}
-              {{ filtered.list }}
-            {% else %}
-              {{ remaining | map(attribute='entity_id') | list }}
-            {% endif %}
       - alias: "Update - Remaining - Wait"
         continue_on_error: true
         wait_template: >-
