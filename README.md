@@ -5,6 +5,12 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
+## 🎉 Latest Update - v2025.10.6
+
+**Critical Bug Fix:** Fixed an issue where backups were not being created even when `backup_bool` was set to `true`. The problem was caused by the helper entity being set to 'on' too early in the automation sequence, which prevented the backup creation condition from passing. This has been fixed by removing the early helper entity setting.
+
+**Impact:** Backups will now be created correctly when configured, regardless of whether a helper entity is used. See [CHANGELOG_v2025.10.6.md](changelogs/CHANGELOG_v2025.10.6.md) for full details.
+
 ## ⚠️ Important Notice
 
 - **Home Assistant may restart automatically** as part of the update process
@@ -363,6 +369,8 @@ All changes maintain backward compatibility except for the `skip_breaking_change
 - ✅ No system restart occurs (but log shows it would if needed)
 - ✅ Notifications show "[WHAT-IF]" prefix
 - ✅ Summary shows what would happen without making changes
+
+For more detailed test scenarios and debugging guides, see [TESTING.md](TESTING.md).
 
 ## 🤝 Contributing
 
