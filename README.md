@@ -301,10 +301,7 @@ This is a fork/modification of the original blueprint by [edwardtfn](https://git
 ## 📚 Additional Documentation
 
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Detailed technical implementation
-- [CHANGELOG_v2025.10.3.md](CHANGELOG_v2025.10.3.md) - Complete v2025.10.3 changelog
-- [ISSUE_FIX_SUMMARY.md](ISSUE_FIX_SUMMARY.md) - Issue fix details and root cause analysis
-- [BREAKING_CHANGES_FIX.md](BREAKING_CHANGES_FIX.md) - Breaking changes detection fix details
-- [FIX_VERIFICATION.md](FIX_VERIFICATION.md) - Verification and testing documentation
+- [changelogs/](changelogs/) - Version changelogs and release notes
 
 ## 💡 Tips & Best Practices
 
