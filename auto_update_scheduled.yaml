@@ -303,6 +303,17 @@ blueprint:
           selector:
             boolean:
 
+        whatif_mode:
+          name: What-If Mode (Dry Run)
+          description: >
+            When enabled, the automation will NOT install any updates but will show what would be installed and what would be skipped.
+            
+            This is useful for safely testing the automation configuration and seeing which updates would be applied.
+            All notifications and logging will work normally, showing what would happen without making any actual changes.
+          default: false
+          selector:
+            boolean:
+
     backup_section:
       name: Backup (optional)
       icon: mdi:backup-restore
@@ -717,6 +728,7 @@ variables:
   input_general_update_mode: !input general_update_mode
   input_update_inclusion_mode: !input update_inclusion_mode
   input_skip_breaking_changes: !input skip_breaking_changes
+  input_whatif_mode: !input whatif_mode
   input_notification_mobile_enable: !input notification_mobile_enable
   input_notification_mobile_device: !input notification_mobile_device
   input_notification_telegram_enable: !input notification_telegram_enable
@@ -920,7 +932,7 @@ action:
   - alias: Preparation  # Inform logbook and telegram which update automation is running
     sequence:
       - variables:
-          log_message: '{{ friendly_name }} is {{ "re" if is_resume_after_restart else ""}}starting'
+          log_message: '{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}{{ friendly_name }} is {{ "re" if is_resume_after_restart else ""}}starting'
       - &logbook_update
         if: "{{ input_verbose_logging_bool }}"
         then:
@@ -1109,52 +1121,61 @@ action:
                 continue_on_error: true
           - variables:
               input_backup_location: !input backup_location
-              log_message: "Backing up Home Assistant"
+              log_message: "{% if input_whatif_mode %}[WHAT-IF] Would backup Home Assistant{% else %}Backing up Home Assistant{% endif %}"
           - *logbook_update
           - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
             then:
               - *send_telegram_message
 
-          - alias: "Call backup service with location parameter"
-            action: hassio.backup_full
-            data:
-              compressed: true
-              location: "{{ input_backup_location }}"
-            continue_on_error: true
-
-          - variables:
-              log_message: >
-                Backup triggered
-
-                Monitoring backup status (timeout: {{ input_backup_timeout | int(60) }} minutes)
-          - *logbook_update
-          - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
+          - if: '{{ not input_whatif_mode }}'
             then:
-              - *send_telegram_message
+              - alias: "Call backup service with location parameter"
+                action: hassio.backup_full
+                data:
+                  compressed: true
+                  location: "{{ input_backup_location }}"
+                continue_on_error: true
 
-          - alias: "Wait for backup completion using native backup entity monitoring"
-            continue_on_error: true
-            wait_template: >-
-              {% set backup_sensors = states.sensor
-                | selectattr('attributes.backup_state', 'defined')
-                | list %}
-              {% if backup_sensors | count > 0 %}
-                {{ backup_sensors | selectattr('attributes.backup_state', 'ne', 'backing_up') | list | count == backup_sensors | count }}
-              {% else %}
-                false
-              {% endif %}
-            timeout: "{{ input_backup_timeout | int(60) * 60 }}"
-            continue_on_timeout: true
+              - variables:
+                  log_message: >
+                    Backup triggered
 
-          - variables:
-              log_message: >
-                Backup {% if wait.completed | default(false) %}completed successfully{% else %}timeout reached, continuing anyway{% endif %}.
+                    Monitoring backup status (timeout: {{ input_backup_timeout | int(60) }} minutes)
+              - *logbook_update
+              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
+                then:
+                  - *send_telegram_message
 
-                Continuing...
-          - *logbook_update
-          - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-            then:
-              - *send_telegram_message
+              - alias: "Wait for backup completion using native backup entity monitoring"
+                continue_on_error: true
+                wait_template: >-
+                  {% set backup_sensors = states.sensor
+                    | selectattr('attributes.backup_state', 'defined')
+                    | list %}
+                  {% if backup_sensors | count > 0 %}
+                    {{ backup_sensors | selectattr('attributes.backup_state', 'ne', 'backing_up') | list | count == backup_sensors | count }}
+                  {% else %}
+                    false
+                  {% endif %}
+                timeout: "{{ input_backup_timeout | int(60) * 60 }}"
+                continue_on_timeout: true
+
+              - variables:
+                  log_message: >
+                    Backup {% if wait.completed | default(false) %}completed successfully{% else %}timeout reached, continuing anyway{% endif %}.
+
+                    Continuing...
+              - *logbook_update
+              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
+                then:
+                  - *send_telegram_message
+            else:
+              - variables:
+                  log_message: "[WHAT-IF] Backup skipped in What-If mode"
+              - *logbook_update
+              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
+                then:
+                  - *send_telegram_message
 
   - alias: Update generic
     if:
@@ -1230,7 +1251,7 @@ action:
               alias: Log updating
               sequence:
                 - variables:
-                    log_message: "Updating `{{ current_update_entity_friendly_name }}`..."
+                    log_message: "{% if input_whatif_mode %}[WHAT-IF] Would update{% else %}Updating{% endif %} `{{ current_update_entity_friendly_name }}`..."
                 - *logbook_update
                 - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                   then:
@@ -1238,36 +1259,48 @@ action:
 
             - &update_install
               alias: "Update - Install"
-              continue_on_error: true
-              action: update.install
-              data: {}
-              target:
-                entity_id: '{{ current_update_entity }}'
+              if: '{{ not input_whatif_mode }}'
+              then:
+                - continue_on_error: true
+                  action: update.install
+                  data: {}
+                  target:
+                    entity_id: '{{ current_update_entity }}'
 
             - &update_wait
               alias: "Update - Wait"
               sequence:
-                - alias: Wait
-                  continue_on_error: true
-                  wait_template: "{{ is_state(current_update_entity, 'off') }}"
-                  continue_on_timeout: true
-                  timeout: !input update_timeout
-                - if: '{{ wait.completed }}'
+                - if: '{{ input_whatif_mode }}'
                   then:
                     - variables:
-                        log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
+                        log_message: '`{{ current_update_entity_friendly_name }}` would be updated successfully'
                         applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
                     - *logbook_update
                     - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
                       then:
                         - *send_telegram_message
                   else:
-                    - variables:
-                        log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
-                    - *logbook_update
-                    - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                    - alias: Wait
+                      continue_on_error: true
+                      wait_template: "{{ is_state(current_update_entity, 'off') }}"
+                      continue_on_timeout: true
+                      timeout: !input update_timeout
+                    - if: '{{ wait.completed }}'
                       then:
-                        - *send_telegram_message
+                        - variables:
+                            log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
+                            applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
+                        - *logbook_update
+                        - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                          then:
+                            - *send_telegram_message
+                      else:
+                        - variables:
+                            log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
+                        - *logbook_update
+                        - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
+                          then:
+                            - *send_telegram_message
 
   - alias: Devices firmware
     if:
@@ -1630,32 +1663,34 @@ action:
             else:
               - variables:
                   log_message: >
-                    The system is set to restart automatically when an update requires it.
+                    {% if input_whatif_mode %}[WHAT-IF] Would restart Home Assistant ({{ input_restart_type }}){% else %}The system is set to restart automatically when an update requires it.
 
-                    Restarting Home Assistant ({{ input_restart_type }})
+                    Restarting Home Assistant ({{ input_restart_type }}){% endif %}
               - *logbook_update
               - if: '{{ "restart" in input_notification_telegram_select_notifications }}'
                 then:
                   - *send_telegram_message
 
-              - alias: Mobile app - Send reboot notification
-                if:
-                  - condition: template
-                    value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
+              - if: '{{ not input_whatif_mode }}'
                 then:
-                  - action: notify.{{ input_notification_mobile_device }}
-                    data:
-                      title: '{{ friendly_name }} - Rebooting'
-                      message: 'Home Assistant is restarting now ({{ input_restart_type }})'
+                  - alias: Mobile app - Send reboot notification
+                    if:
+                      - condition: template
+                        value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
+                    then:
+                      - action: notify.{{ input_notification_mobile_device }}
+                        data:
+                          title: '{{ friendly_name }} - Rebooting'
+                          message: 'Home Assistant is restarting now ({{ input_restart_type }})'
+                        continue_on_error: true
+
+                  - alias: "Wait 15 seconds to deliver the telegram message."
+                    delay:
+                      seconds: 15
+
+                  - alias: "Restart - Call reboot service"
                     continue_on_error: true
-
-              - alias: "Wait 15 seconds to deliver the telegram message."
-                delay:
-                  seconds: 15
-
-              - alias: "Restart - Call reboot service"
-                continue_on_error: true
-                action: '{{ "hassio.host_reboot" if input_restart_type == "host" else "homeassistant.restart" }}'
+                    action: '{{ "hassio.host_reboot" if input_restart_type == "host" else "homeassistant.restart" }}'
 
   - alias: Post-update actions
     sequence:
@@ -1688,12 +1723,12 @@ action:
     then:
       - variables:
           log_message: >
-            Update Summary:
+            {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}Update Summary:
             {% if applied_updates | count > 0 %}
-            Applied updates ({{ applied_updates | count }}):
+            {% if input_whatif_mode %}Would apply updates{% else %}Applied updates{% endif %} ({{ applied_updates | count }}):
             {% for update in applied_updates %}  - {{ update }}
             {% endfor %}
-            {% else %}No updates applied.
+            {% else %}No updates {% if input_whatif_mode %}would be {% endif %}applied.
             {% endif %}
             {% if skipped_updates | count > 0 %}
             Skipped updates ({{ skipped_updates | count }}):
@@ -1701,19 +1736,19 @@ action:
             {% endfor %}
             {% endif %}
             {% if pending_restart_items_count is defined and pending_restart_items_count > 0 %}
-            System restart: {% if input_restart_type != "no-restart" %}Performed{% else %}Required (not automatic){% endif %}
+            System restart: {% if input_whatif_mode %}Would be performed{% elif input_restart_type != "no-restart" %}Performed{% else %}Required (not automatic){% endif %}
             {% endif %}
       - alias: Mobile app - Send summary notification
         action: notify.{{ input_notification_mobile_device }}
         data:
-          title: '{{ friendly_name }} - Complete'
+          title: '{{ friendly_name }} - {% if input_whatif_mode %}What-If Complete{% else %}Complete{% endif %}'
           message: '{{ log_message }}'
         continue_on_error: true
 
   - alias: Done  # All done!
     sequence:
       - variables:
-          log_message: "Done!"
+          log_message: "{% if input_whatif_mode %}[WHAT-IF] Dry run complete - no actual changes made{% else %}Done!{% endif %}"
       - *logbook_update
       - if: '{{ "done" in input_notification_telegram_select_notifications }}'
         then:
