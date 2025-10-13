@@ -233,7 +233,22 @@ notification_mobile_device: mobile_app_my_phone
 
 ## 📋 Version History
 
-### v2025.10.4 (Current)
+### v2025.10.5 (Current)
+
+**🐛 Critical Bug Fixes:**
+- Fixed infinite loop in What-If mode that caused automation to repeat indefinitely
+- Fixed updates still being installed despite What-If mode being enabled
+- Added `processed_updates` tracking to normal mode success and timeout paths
+- Wrapped "Update - Remaining" section in What-If mode conditional
+
+**Impact:**
+- ✅ What-If mode now works correctly - no infinite loops
+- ✅ No updates are installed in What-If mode (true dry run)
+- ✅ All update modes now consistently track processed entities
+
+See [CHANGELOG_v2025.10.5.md](changelogs/CHANGELOG_v2025.10.5.md) for detailed technical information.
+
+### v2025.10.4
 
 **✨ New Feature:**
 - Added What-If Mode (dry run) for safe automation testing
@@ -404,4 +419,4 @@ If you find this blueprint useful, consider supporting the original author:
 
 ---
 
-**Last Updated:** October 2025 (v2025.10.4)
+**Last Updated:** October 2025 (v2025.10.5)

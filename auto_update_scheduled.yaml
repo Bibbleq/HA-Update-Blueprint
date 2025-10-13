@@ -36,6 +36,13 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.5
+
+    **Critical Bug Fixes:** Fixed What-If Mode issues from v2025.10.4:
+    - Fixed infinite loop when What-If mode was enabled
+    - Fixed updates still being installed despite What-If mode being enabled
+    What-If mode now works correctly as a true dry run with no changes made.
+
     ## v2025.10.4
 
     **New Feature:** Added What-If Mode (dry run) for safely testing automation configuration without making any changes.
