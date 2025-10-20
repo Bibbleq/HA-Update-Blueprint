@@ -5,11 +5,15 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
-## 🎉 Latest Update - v2025.10.6
+## 🎉 Latest Update - v2025.10.7
 
-**Critical Bug Fix:** Fixed an issue where backups were not being created even when `backup_bool` was set to `true`. The problem was caused by the helper entity being set to 'on' too early in the automation sequence, which prevented the backup creation condition from passing. This has been fixed by removing the early helper entity setting.
+**Critical Bug Fixes:**
+- **What-If Mode:** Fixed issue where What-If mode was still creating actual backups and waiting for completion. What-If mode now properly skips all backup operations and immediately continues to update simulation.
+- **Backup Monitoring:** Enhanced backup completion detection with fallback methods (idle state check) to reduce false timeouts.
+- **Notifications:** Added `[WHAT-IF MODE]` prefix to all relevant notifications throughout the automation for better clarity.
+- **Logging:** Improved backup timeout messages to indicate the backup may still be running in the background.
 
-**Impact:** Backups will now be created correctly when configured, regardless of whether a helper entity is used. See [CHANGELOG_v2025.10.6.md](changelogs/CHANGELOG_v2025.10.6.md) for full details.
+**Impact:** What-If mode now works as a true dry run without creating backups or making any changes. Backup monitoring is more reliable. All notifications clearly indicate What-If mode status. See [CHANGELOG_v2025.10.7.md](changelogs/CHANGELOG_v2025.10.7.md) for full details.
 
 ## ⚠️ Important Notice
 
@@ -239,7 +243,23 @@ notification_mobile_device: mobile_app_my_phone
 
 ## 📋 Version History
 
-### v2025.10.5 (Current)
+### v2025.10.7 (Current)
+
+**🐛 Critical Bug Fixes:**
+- Fixed What-If mode still creating actual backups (now properly skips backup creation)
+- Enhanced backup completion monitoring with fallback detection methods (idle state check)
+- Added `[WHAT-IF MODE]` prefix to all notifications for better clarity
+- Improved backup timeout messages with more detail
+
+**Impact:**
+- ✅ What-If mode now works as a true dry run without creating backups
+- ✅ Backup monitoring more reliable with reduced false timeouts
+- ✅ All notifications clearly indicate What-If mode status
+- ✅ Better logging when backup times out
+
+See [CHANGELOG_v2025.10.7.md](changelogs/CHANGELOG_v2025.10.7.md) for detailed technical information.
+
+### v2025.10.5
 
 **🐛 Critical Bug Fixes:**
 - Fixed infinite loop in What-If mode that caused automation to repeat indefinitely
@@ -427,4 +447,4 @@ If you find this blueprint useful, consider supporting the original author:
 
 ---
 
-**Last Updated:** October 2025 (v2025.10.5)
+**Last Updated:** October 2025 (v2025.10.7)

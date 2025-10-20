@@ -36,6 +36,16 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.7
+
+    **Critical Bug Fixes:**
+    - Fixed What-If mode still creating actual backups (now properly skips backup creation)
+    - Enhanced backup completion monitoring with fallback detection methods
+    - Added [WHAT-IF MODE] prefix to all notifications for better clarity
+    - Improved backup timeout messages with more detail
+
+    What-If mode now works as a true dry run without creating backups or making any changes.
+
     ## v2025.10.5
 
     **Critical Bug Fixes:** Fixed What-If Mode issues from v2025.10.4:
