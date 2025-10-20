@@ -5,7 +5,21 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
-## 🎉 Latest Update - v2025.10.7
+## 🎉 Latest Update - v2025.10.8
+
+**Enhanced Backup Detection:**
+- **Event-Driven Monitoring:** Switched from polling to event-driven backup detection for faster and more reliable completion detection
+- **New Backup Service:** Using `backup.create_automatic` instead of `hassio.backup_full` for improved compatibility with HA's native backup system
+- **Dual Trigger System:**
+  - Primary: Monitors `sensor.backup_backup_manager_state` transition (create_backup → idle)
+  - Fallback: Monitors `sensor.backup_last_successful_automatic_backup` updates
+- **Better Diagnostics:** Logs backup duration and detection method used
+- **No More Polling Delays:** Instant detection when backup completes, no unnecessary waiting
+- **Deprecated:** `backup_location` input (now uses HA's configured backup location)
+
+**Impact:** Backups are detected as soon as they complete, reducing automation run time and eliminating false timeout warnings. See changelog for full details.
+
+## Previous Update - v2025.10.7
 
 **Critical Bug Fixes:**
 - **What-If Mode:** Fixed issue where What-If mode was still creating actual backups and waiting for completion. What-If mode now properly skips all backup operations and immediately continues to update simulation.
@@ -42,8 +56,11 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
 
 - **💾 Automatic Backups**
   - Creates backups before applying updates (enabled by default)
+  - Event-driven monitoring for instant completion detection
+  - Uses Home Assistant's native automatic backup service
+  - Dual trigger system (state transition + fallback)
+  - Logs backup duration and detection method
   - Works with or without helper entity configuration
-  - Respects Home Assistant's native backup system
   - Optional control via helper entity state
 
 - **👤 Person Presence Check**
@@ -243,7 +260,25 @@ notification_mobile_device: mobile_app_my_phone
 
 ## 📋 Version History
 
-### v2025.10.7 (Current)
+### v2025.10.8 (Current)
+
+**✨ Enhanced Backup Detection:**
+- Switched from `hassio.backup_full` to `backup.create_automatic` for improved reliability
+- Replaced polling-based monitoring with event-driven triggers
+- Primary trigger: `sensor.backup_backup_manager_state` (create_backup → idle)
+- Fallback trigger: `sensor.backup_last_successful_automatic_backup` updates
+- Added backup duration tracking and detection method logging
+- Removed polling delays for instant completion detection
+- Deprecated `backup_location` input (uses HA's configured backup location)
+
+**Impact:**
+- ✅ Faster backup completion detection (no polling delays)
+- ✅ More reliable monitoring with dual trigger system
+- ✅ Better diagnostics with duration and method logging
+- ✅ Reduced false timeout warnings
+- ✅ Improved compatibility with HA's native backup system
+
+### v2025.10.7
 
 **🐛 Critical Bug Fixes:**
 - Fixed What-If mode still creating actual backups (now properly skips backup creation)
@@ -447,4 +482,4 @@ If you find this blueprint useful, consider supporting the original author:
 
 ---
 
-**Last Updated:** October 2025 (v2025.10.7)
+**Last Updated:** October 2025 (v2025.10.8)
