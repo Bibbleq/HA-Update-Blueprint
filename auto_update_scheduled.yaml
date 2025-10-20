@@ -36,6 +36,19 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.8
+
+    **Enhanced Backup Detection:**
+    - Switched from `hassio.backup_full` to `backup.create_automatic` for improved reliability
+    - Replaced polling-based monitoring with event-driven triggers for faster detection
+    - Primary trigger: Monitors `sensor.backup_backup_manager_state` transition (create_backup → idle)
+    - Fallback trigger: Monitors `sensor.backup_last_successful_automatic_backup` updates
+    - Added backup duration tracking and detection method logging for diagnostics
+    - Removed polling delays for more responsive backup completion detection
+    - Deprecated `backup_location` input (now uses HA's configured backup location)
+
+    Event-driven monitoring provides faster, more reliable backup completion detection without delays.
+
     ## v2025.10.7
 
     **Critical Bug Fixes:**
@@ -353,8 +366,9 @@ blueprint:
           name: Backup Timeout
           description: >-
             Specify the maximum time to wait for the backup process to complete.
-            The automation monitors Home Assistant's native backup entities to detect
-            when the backup finishes. If the backup doesn't complete within this timeout,
+            The automation uses event-driven monitoring of Home Assistant's native backup
+            sensors for instant detection when the backup finishes. This timeout serves as
+            a safety net only. If the backup doesn't complete within this timeout,
             the automation will continue anyway. Default is 60 minutes.
           default: 60
           selector:
@@ -381,11 +395,14 @@ blueprint:
               enable_day: true
 
         backup_location:
-          name: Backup Location
+          name: Backup Location (Deprecated)
           description: >-
-            You can create a new backup location under [Settings > System > Storage](https://my.home-assistant.io/redirect/storage/).
-
-            Specify where to store the backup for this autoupdate process.
+            NOTE: This option is deprecated and no longer used. The blueprint now uses
+            the automatic backup service which stores backups in Home Assistant's configured
+            backup location. This input is kept for backward compatibility only.
+            
+            You can configure backup storage locations under
+            [Settings > System > Storage](https://my.home-assistant.io/redirect/storage/).
           default: "/backup"
           selector:
             backup_location:
@@ -1140,50 +1157,59 @@ action:
                       entity_id: "{{ input_update_process_started_entity }}"
                     continue_on_error: true
               - variables:
-                  input_backup_location: !input backup_location
                   log_message: "Backing up Home Assistant"
                   notification_event: "backup"
               - *logbook_update
               - *send_notifications
 
-              - alias: "Call backup service with location parameter"
-                action: hassio.backup_full
-                data:
-                  compressed: true
-                  location: "{{ input_backup_location }}"
+              - variables:
+                  backup_start_time: '{{ now() }}'
+
+              - alias: "Call backup service using automatic backup"
+                action: backup.create_automatic
                 continue_on_error: true
 
               - variables:
                   log_message: >
-                    Backup triggered
+                    Backup triggered using event-driven monitoring
 
-                    Monitoring backup status (timeout: {{ input_backup_timeout | int(60) }} minutes)
+                    Monitoring backup completion (timeout: {{ input_backup_timeout | int(60) }} minutes)
                   notification_event: "backup"
               - *logbook_update
               - *send_notifications
 
-              - alias: "Wait for backup completion using improved monitoring"
+              - alias: "Wait for backup completion using event-driven monitoring"
                 continue_on_error: true
-                wait_template: >-
-                  {% set backup_sensors = states.sensor
-                    | selectattr('attributes.backup_state', 'defined')
-                    | list %}
-                  {% if backup_sensors | count > 0 %}
-                    {# Check if all backup sensors are not in 'backing_up' state #}
-                    {% set not_backing_up = backup_sensors | selectattr('attributes.backup_state', 'ne', 'backing_up') | list | count == backup_sensors | count %}
-                    {# Check if any sensor shows 'idle' state as completion indicator #}
-                    {% set has_idle = backup_sensors | selectattr('attributes.backup_state', 'eq', 'idle') | list | count > 0 %}
-                    {{ not_backing_up or has_idle }}
-                  {% else %}
-                    false
-                  {% endif %}
-                timeout: "{{ input_backup_timeout | int(60) * 60 }}"
+                wait_for_trigger:
+                  - platform: state
+                    entity_id: sensor.backup_backup_manager_state
+                    from: create_backup
+                    to: idle
+                  - platform: state
+                    entity_id: sensor.backup_last_successful_automatic_backup
+                timeout:
+                  minutes: '{{ input_backup_timeout | int(60) }}'
                 continue_on_timeout: true
 
               - variables:
                   backup_completed: '{{ wait.completed | default(false) }}'
+                  backup_duration_seconds: '{{ (now() - backup_start_time).total_seconds() | int(0) }}'
+                  backup_detection_method: >
+                    {% if wait.trigger is defined and wait.trigger.entity_id is defined %}
+                      {% if wait.trigger.entity_id == "sensor.backup_backup_manager_state" %}
+                        Backup manager state transition (create_backup → idle)
+                      {% elif wait.trigger.entity_id == "sensor.backup_last_successful_automatic_backup" %}
+                        Last successful backup update
+                      {% else %}
+                        {{ wait.trigger.entity_id }}
+                      {% endif %}
+                    {% else %}
+                      Timeout (backup may still be running)
+                    {% endif %}
                   log_message: >
-                    Backup {% if backup_completed %}completed successfully{% else %}monitoring timeout reached ({{ input_backup_timeout | int(60) }} minutes), continuing anyway. The backup may still be running in the background{% endif %}.
+                    Backup {% if backup_completed %}completed successfully in {{ backup_duration_seconds }} seconds
+                    
+                    Detection method: {{ backup_detection_method }}{% else %}monitoring timeout reached ({{ input_backup_timeout | int(60) }} minutes, {{ backup_duration_seconds }} seconds elapsed), continuing anyway. The backup may still be running in the background{% endif %}.
 
                     Continuing...
                   notification_event: "backup"
