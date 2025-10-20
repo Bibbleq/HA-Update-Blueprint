@@ -1001,7 +1001,7 @@ action:
     then:
       - variables:
           log_message: >
-            List of updates:
+            {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}List of updates:
 
             - `{{ states.update
                 | selectattr('state', 'eq', 'on')
@@ -1012,7 +1012,7 @@ action:
       - *send_notifications
     else:
       - variables:
-          log_message: "There's nothing to update"
+          log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}There's nothing to update"
           notification_event: "list_of_updates"
       - *logbook_update
       - *send_notifications
@@ -1030,7 +1030,7 @@ action:
       - condition: '{{ input_actions_pre_update is sequence }}'
       - *recalc_update_list
       - variables:
-          log_message: "Running pre-update actions..."
+          log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would run{% else %}Running{% endif %} pre-update actions..."
           notification_event: "pre_update_actions"
       - *logbook_update
       - *send_notifications
@@ -1040,7 +1040,7 @@ action:
         sequence: !input actions_pre_update
 
       - variables:
-          log_message: "Pre-update actions completed"
+          log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would complete{% else %}Pre-update actions completed{% endif %}"
           notification_event: "pre_update_actions"
       - *logbook_update
       - *send_notifications
@@ -1113,23 +1113,29 @@ action:
                 entity_id: !input update_process_started_entity
                 state: 'off'
         then:
-          - alias: "Set helper entity to ON (if configured)"
-            if:
-              - '{{ input_update_process_started_entity | string | length > 0 }}'
+          - if: '{{ input_whatif_mode }}'
             then:
-              - action: input_boolean.turn_on
-                target:
-                  entity_id: "{{ input_update_process_started_entity }}"
-                continue_on_error: true
-          - variables:
-              input_backup_location: !input backup_location
-              log_message: "{% if input_whatif_mode %}[WHAT-IF] Would backup Home Assistant{% else %}Backing up Home Assistant{% endif %}"
-              notification_event: "backup"
-          - *logbook_update
-          - *send_notifications
+              - variables:
+                  log_message: "[WHAT-IF MODE] Would create backup before updates"
+                  notification_event: "backup"
+              - *logbook_update
+              - *send_notifications
+            else:
+              - alias: "Set helper entity to ON (if configured)"
+                if:
+                  - '{{ input_update_process_started_entity | string | length > 0 }}'
+                then:
+                  - action: input_boolean.turn_on
+                    target:
+                      entity_id: "{{ input_update_process_started_entity }}"
+                    continue_on_error: true
+              - variables:
+                  input_backup_location: !input backup_location
+                  log_message: "Backing up Home Assistant"
+                  notification_event: "backup"
+              - *logbook_update
+              - *send_notifications
 
-          - if: '{{ not input_whatif_mode }}'
-            then:
               - alias: "Call backup service with location parameter"
                 action: hassio.backup_full
                 data:
@@ -1146,14 +1152,18 @@ action:
               - *logbook_update
               - *send_notifications
 
-              - alias: "Wait for backup completion using native backup entity monitoring"
+              - alias: "Wait for backup completion using improved monitoring"
                 continue_on_error: true
                 wait_template: >-
                   {% set backup_sensors = states.sensor
                     | selectattr('attributes.backup_state', 'defined')
                     | list %}
                   {% if backup_sensors | count > 0 %}
-                    {{ backup_sensors | selectattr('attributes.backup_state', 'ne', 'backing_up') | list | count == backup_sensors | count }}
+                    {# Check if all backup sensors are not in 'backing_up' state #}
+                    {% set not_backing_up = backup_sensors | selectattr('attributes.backup_state', 'ne', 'backing_up') | list | count == backup_sensors | count %}
+                    {# Check if any sensor shows 'idle' state as completion indicator #}
+                    {% set has_idle = backup_sensors | selectattr('attributes.backup_state', 'eq', 'idle') | list | count > 0 %}
+                    {{ not_backing_up or has_idle }}
                   {% else %}
                     false
                   {% endif %}
@@ -1161,16 +1171,11 @@ action:
                 continue_on_timeout: true
 
               - variables:
+                  backup_completed: '{{ wait.completed | default(false) }}'
                   log_message: >
-                    Backup {% if wait.completed | default(false) %}completed successfully{% else %}timeout reached, continuing anyway{% endif %}.
+                    Backup {% if backup_completed %}completed successfully{% else %}monitoring timeout reached ({{ input_backup_timeout | int(60) }} minutes), continuing anyway. The backup may still be running in the background{% endif %}.
 
                     Continuing...
-                  notification_event: "backup"
-              - *logbook_update
-              - *send_notifications
-            else:
-              - variables:
-                  log_message: "[WHAT-IF] Backup skipped in What-If mode"
                   notification_event: "backup"
               - *logbook_update
               - *send_notifications
@@ -1240,7 +1245,7 @@ action:
               if: '{{ has_breaking_changes }}'
               then:
                 - variables:
-                    log_message: "Skipping `{{ current_update_entity_friendly_name }}` - contains breaking changes"
+                    log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would skip{% else %}Skipping{% endif %} `{{ current_update_entity_friendly_name }}` - contains breaking changes"
                     skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
                     processed_updates: '{{ processed_updates + [current_update_entity] }}'
                     notification_event: "update_progress"
@@ -1540,7 +1545,7 @@ action:
     sequence:
       - *recalc_update_list
       - variables:
-          log_message: "Finishing update process"
+          log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}Finishing update process"
           notification_event: "remaining_updates"
       - *logbook_update
       - *send_notifications
@@ -1560,14 +1565,14 @@ action:
         then:
           - variables:
               log_message: |
-                Remaining updates:
+                {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}Remaining updates:
                   - `{{ remaining_updates | join("`\n- `") }}`
               notification_event: "remaining_updates"
           - *logbook_update
           - *send_notifications
         else:
           - variables:
-              log_message: "No remaining items to be updated"
+              log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}No remaining items to be updated"
               notification_event: "remaining_updates"
           - *logbook_update
           - *send_notifications
@@ -1605,14 +1610,14 @@ action:
       - if: '{{ pending_restart_items_count < 1 }}'
         then:
           - variables:
-              log_message: 'Nothing requiring a restart'
+              log_message: '{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}Nothing requiring a restart'
               notification_event: "restart"
           - *logbook_update
           - *send_notifications
       - condition: '{{ pending_restart_items_count > 0 }}'
       - variables:
           log_message: >
-            {{ pending_restart_items_count }} item{{ "s" if pending_restart_items_count > 1 }} pending a restart:
+            {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}{{ pending_restart_items_count }} item{{ "s" if pending_restart_items_count > 1 }} {% if input_whatif_mode %}would require{% else %}pending{% endif %} a restart:
 
             - `{{ pending_restart_items | join("`\n- `") }}`
           notification_event: "restart"
@@ -1640,7 +1645,7 @@ action:
           - if: '{{ has_invalid_config or has_check_config_notification }}'
             then:
               - variables:
-                  log_message: "Running pre-restart actions..."
+                  log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would run{% else %}Running{% endif %} pre-restart actions..."
                   notification_event: "restart"
               - *logbook_update
               - *send_notifications
@@ -1650,7 +1655,7 @@ action:
                 sequence: !input actions_pre_restart
               - variables:
                   log_message: >
-                    Skipping restart process due to notifications of invalid configurations:
+                    {% if input_whatif_mode %}[WHAT-IF MODE] Would skip{% else %}Skipping{% endif %} restart process due to notifications of invalid configurations:
 
                       - has_invalid_config = {{ has_invalid_config }}
 
@@ -1695,7 +1700,7 @@ action:
           input_actions_pos_update: !input actions_pos_update
       - condition: '{{ input_actions_pos_update is sequence }}'
       - variables:
-          log_message: "Running post-update actions"
+          log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would run{% else %}Running{% endif %} post-update actions"
           notification_event: "post_update_actions"
       - *logbook_update
       - *send_notifications
