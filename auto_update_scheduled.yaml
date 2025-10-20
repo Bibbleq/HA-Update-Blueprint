@@ -947,6 +947,7 @@ action:
     sequence:
       - variables:
           log_message: '{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}{{ friendly_name }} is {{ "re" if is_resume_after_restart else ""}}starting'
+          notification_event: "starting"
       - &logbook_update
         if: "{{ input_verbose_logging_bool }}"
         then:
@@ -958,14 +959,17 @@ action:
               message: '{{ log_message }}'
             continue_on_error: true
         continue_on_error: true
-      - if: '{{ "starting" in input_notification_telegram_select_notifications }}'
-        then:
-          - &send_telegram_message
-            alias: Send telegram message
+      - &send_notifications
+        alias: Send notifications
+        parallel:
+          - alias: Send telegram notification
             if:
               - condition: template
                 value_template: '{{ input_notification_telegram_enable }}'
                 alias: Check if telegram notifications are enabled
+              - condition: template
+                value_template: '{{ notification_event in input_notification_telegram_select_notifications }}'
+                alias: Check if event should be notified via telegram
             then:
               - alias: Telegram bot - Send message
                 action: telegram_bot.send_message
@@ -974,8 +978,8 @@ action:
                   target: '{{ input_notification_telegram_target_id }}'
                   disable_notification: '{{ input_notification_telegram_disable_notification }}'
                   message: '{{ log_message }}'
-      - &send_mobile_notification
-            alias: Send mobile notification
+                continue_on_error: true
+          - alias: Send mobile notification
             if:
               - condition: template
                 value_template: '{{ input_notification_mobile_enable and input_notification_mobile_device | length > 0 }}'
@@ -986,6 +990,7 @@ action:
                 data:
                   title: '{{ friendly_name }}'
                   message: '{{ log_message }}'
+                continue_on_error: true
 
   - alias: Report list of updates
     if:
@@ -1002,19 +1007,15 @@ action:
                 | selectattr('state', 'eq', 'on')
                 | rejectattr('entity_id', 'in', input_update_exclusions)
                 | map(attribute='name') | list | join("`\n- `") }}`
+          notification_event: "list_of_updates"
       - *logbook_update
-      - if: '{{ "list_of_updates" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
-      - *send_mobile_notification
+      - *send_notifications
     else:
       - variables:
           log_message: "There's nothing to update"
+          notification_event: "list_of_updates"
       - *logbook_update
-      - if: '{{ "list_of_updates" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
-      - *send_mobile_notification
+      - *send_notifications
 
   - alias: Pre-update actions
     if:
@@ -1030,10 +1031,9 @@ action:
       - *recalc_update_list
       - variables:
           log_message: "Running pre-update actions..."
+          notification_event: "pre_update_actions"
       - *logbook_update
-      - if: '{{ "pre_update_actions" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 
       - alias: "Run pre-update actions"
         continue_on_error: true
@@ -1041,10 +1041,9 @@ action:
 
       - variables:
           log_message: "Pre-update actions completed"
+          notification_event: "pre_update_actions"
       - *logbook_update
-      - if: '{{ "pre_update_actions" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 
   - alias: Backup
     if:
@@ -1092,18 +1091,16 @@ action:
                 then:
                   - variables:
                       log_message: "Last backup is too old"
+                      notification_event: "backup"
                   - *logbook_update
-                  - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-                    then:
-                      - *send_telegram_message
+                  - *send_notifications
                   - stop: "Last backup is too old"
             else:
               - variables:
                   log_message: "No backup entity with last_backup attribute found"
+                  notification_event: "backup"
               - *logbook_update
-              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
               - stop: "No backup entity with last_backup attribute found"
       - alias: "Backup"
         continue_on_error: true
@@ -1127,10 +1124,9 @@ action:
           - variables:
               input_backup_location: !input backup_location
               log_message: "{% if input_whatif_mode %}[WHAT-IF] Would backup Home Assistant{% else %}Backing up Home Assistant{% endif %}"
+              notification_event: "backup"
           - *logbook_update
-          - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-            then:
-              - *send_telegram_message
+          - *send_notifications
 
           - if: '{{ not input_whatif_mode }}'
             then:
@@ -1146,10 +1142,9 @@ action:
                     Backup triggered
 
                     Monitoring backup status (timeout: {{ input_backup_timeout | int(60) }} minutes)
+                  notification_event: "backup"
               - *logbook_update
-              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
 
               - alias: "Wait for backup completion using native backup entity monitoring"
                 continue_on_error: true
@@ -1170,17 +1165,15 @@ action:
                     Backup {% if wait.completed | default(false) %}completed successfully{% else %}timeout reached, continuing anyway{% endif %}.
 
                     Continuing...
+                  notification_event: "backup"
               - *logbook_update
-              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
             else:
               - variables:
                   log_message: "[WHAT-IF] Backup skipped in What-If mode"
+                  notification_event: "backup"
               - *logbook_update
-              - if: '{{ "backup" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
 
   - alias: Update generic
     if:
@@ -1250,10 +1243,9 @@ action:
                     log_message: "Skipping `{{ current_update_entity_friendly_name }}` - contains breaking changes"
                     skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
                     processed_updates: '{{ processed_updates + [current_update_entity] }}'
+                    notification_event: "update_progress"
                 - *logbook_update
-                - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                  then:
-                    - *send_telegram_message
+                - *send_notifications
 
             - if: '{{ not has_breaking_changes }}'
               then:
@@ -1262,10 +1254,9 @@ action:
                   sequence:
                     - variables:
                         log_message: "{% if input_whatif_mode %}[WHAT-IF] Would update{% else %}Updating{% endif %} `{{ current_update_entity_friendly_name }}`..."
+                        notification_event: "update_progress"
                     - *logbook_update
-                    - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                      then:
-                        - *send_telegram_message
+                    - *send_notifications
 
                 - &update_install
                   alias: "Update - Install"
@@ -1286,10 +1277,9 @@ action:
                             log_message: '`{{ current_update_entity_friendly_name }}` would be updated successfully'
                             applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
                             processed_updates: '{{ processed_updates + [current_update_entity] }}'
+                            notification_event: "update_progress"
                         - *logbook_update
-                        - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                          then:
-                            - *send_telegram_message
+                        - *send_notifications
                       else:
                         - alias: Wait
                           continue_on_error: true
@@ -1302,18 +1292,16 @@ action:
                                 log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
                                 applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
                                 processed_updates: '{{ processed_updates + [current_update_entity] }}'
+                                notification_event: "update_progress"
                             - *logbook_update
-                            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                              then:
-                                - *send_telegram_message
+                            - *send_notifications
                           else:
                             - variables:
                                 log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
                                 processed_updates: '{{ processed_updates + [current_update_entity] }}'
+                                notification_event: "update_progress"
                             - *logbook_update
-                            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-                              then:
-                                - *send_telegram_message
+                            - *send_notifications
 
   - alias: Devices firmware
     if:
@@ -1348,10 +1336,9 @@ action:
           sequence:
             - variables:
                 log_message: "Starting sequence of Devices firmware update"
+                notification_event: "update_progress"
             - *logbook_update
-            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-              then:
-                - *send_telegram_message
+            - *send_notifications
 
             - variables:
                 updates_pending: >
@@ -1406,10 +1393,9 @@ action:
           sequence:
             - variables:
                 log_message: "Starting sequence of core items updates..."
+                notification_event: "update_progress"
             - *logbook_update
-            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-              then:
-                - *send_telegram_message
+            - *send_notifications
 
             - variables:
                 updates_pending: >
@@ -1465,10 +1451,9 @@ action:
           sequence:
             - variables:
                 log_message: "Starting sequence of OS update"
+                notification_event: "update_progress"
             - *logbook_update
-            - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-              then:
-                - *send_telegram_message
+            - *send_notifications
 
             - variables:
                 updates_pending: >
@@ -1503,10 +1488,9 @@ action:
       - *recalc_update_list
       - variables:
           log_message: "Updating all remaining items (if any)"
+          notification_event: "update_progress"
       - *logbook_update
-      - if: '{{ "update_progress" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 
       - alias: "Update - Remaining - Install"
         continue_on_error: true
@@ -1557,10 +1541,9 @@ action:
       - *recalc_update_list
       - variables:
           log_message: "Finishing update process"
+          notification_event: "remaining_updates"
       - *logbook_update
-      - if: '{{ "remaining_updates" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 
       - variables:
           remaining_updates: |
@@ -1579,17 +1562,15 @@ action:
               log_message: |
                 Remaining updates:
                   - `{{ remaining_updates | join("`\n- `") }}`
+              notification_event: "remaining_updates"
           - *logbook_update
-          - if: '{{ "remaining_updates" in input_notification_telegram_select_notifications }}'
-            then:
-              - *send_telegram_message
+          - *send_notifications
         else:
           - variables:
               log_message: "No remaining items to be updated"
+              notification_event: "remaining_updates"
           - *logbook_update
-          - if: '{{ "remaining_updates" in input_notification_telegram_select_notifications }}'
-            then:
-              - *send_telegram_message
+          - *send_notifications
 
   - alias: Restart  # Restart Home Assistant
     sequence:
@@ -1625,20 +1606,18 @@ action:
         then:
           - variables:
               log_message: 'Nothing requiring a restart'
+              notification_event: "restart"
           - *logbook_update
-          - if: '{{ "restart" in input_notification_telegram_select_notifications }}'
-            then:
-              - *send_telegram_message
+          - *send_notifications
       - condition: '{{ pending_restart_items_count > 0 }}'
       - variables:
           log_message: >
             {{ pending_restart_items_count }} item{{ "s" if pending_restart_items_count > 1 }} pending a restart:
 
             - `{{ pending_restart_items | join("`\n- `") }}`
+          notification_event: "restart"
       - *logbook_update
-      - if: '{{ "restart" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 
       - alias: "Restart"
         continue_on_error: true
@@ -1662,10 +1641,9 @@ action:
             then:
               - variables:
                   log_message: "Running pre-restart actions..."
+                  notification_event: "restart"
               - *logbook_update
-              - if: '{{ "restart" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
 
               - alias: "Run pre-restart actions"
                 continue_on_error: true
@@ -1677,20 +1655,18 @@ action:
                       - has_invalid_config = {{ has_invalid_config }}
 
                       - has_check_config_notification = {{ has_check_config_notification }}
+                  notification_event: "restart"
               - *logbook_update
-              - if: '{{ "restart" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
             else:
               - variables:
                   log_message: >
                     {% if input_whatif_mode %}[WHAT-IF] Would restart Home Assistant ({{ input_restart_type }}){% else %}The system is set to restart automatically when an update requires it.
 
                     Restarting Home Assistant ({{ input_restart_type }}){% endif %}
+                  notification_event: "restart"
               - *logbook_update
-              - if: '{{ "restart" in input_notification_telegram_select_notifications }}'
-                then:
-                  - *send_telegram_message
+              - *send_notifications
 
               - if: '{{ not input_whatif_mode }}'
                 then:
@@ -1720,10 +1696,9 @@ action:
       - condition: '{{ input_actions_pos_update is sequence }}'
       - variables:
           log_message: "Running post-update actions"
+          notification_event: "post_update_actions"
       - *logbook_update
-      - if: '{{ "post_update_actions" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 
       - alias: "Run post-update actions"
         continue_on_error: true
@@ -1770,8 +1745,7 @@ action:
     sequence:
       - variables:
           log_message: "{% if input_whatif_mode %}[WHAT-IF] Dry run complete - no actual changes made{% else %}Done!{% endif %}"
+          notification_event: "done"
       - *logbook_update
-      - if: '{{ "done" in input_notification_telegram_select_notifications }}'
-        then:
-          - *send_telegram_message
+      - *send_notifications
 ...
