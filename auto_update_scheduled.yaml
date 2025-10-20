@@ -1006,6 +1006,7 @@ action:
       - if: '{{ "list_of_updates" in input_notification_telegram_select_notifications }}'
         then:
           - *send_telegram_message
+      - *send_mobile_notification
     else:
       - variables:
           log_message: "There's nothing to update"
@@ -1013,6 +1014,7 @@ action:
       - if: '{{ "list_of_updates" in input_notification_telegram_select_notifications }}'
         then:
           - *send_telegram_message
+      - *send_mobile_notification
 
   - alias: Pre-update actions
     if:
