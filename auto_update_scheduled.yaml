@@ -1403,14 +1403,18 @@ action:
                 - variables:
                     ai_has_concern: >
                       {% if ai_response is defined and ai_response.response is defined %}
-                        {% set response_text = ai_response.response.speech.plain.speech | default('') | upper %}
+                        {% set speech_data = ai_response.response.speech | default({}) %}
+                        {% set plain_data = speech_data.plain | default({}) %}
+                        {% set response_text = plain_data.speech | default('') | upper %}
                         {{ 'CONCERN' in response_text }}
                       {% else %}
                         false
                       {% endif %}
                     ai_concern_reason: >
                       {% if ai_response is defined and ai_response.response is defined %}
-                        {% set response_text = ai_response.response.speech.plain.speech | default('') %}
+                        {% set speech_data = ai_response.response.speech | default({}) %}
+                        {% set plain_data = speech_data.plain | default({}) %}
+                        {% set response_text = plain_data.speech | default('') %}
                         {% if 'CONCERN' in response_text | upper %}
                           {{ response_text | replace('CONCERN:', '') | replace('CONCERN', '') | trim }}
                         {% else %}
