@@ -1387,6 +1387,8 @@ action:
                       {% endif %}
                       
                       UPDATE: {{ current_update_entity_friendly_name }}
+                      CURRENT VERSION: {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
+                      NEW VERSION: {{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('unknown') }}
                       
                       RELEASE NOTES:
                       {{ release_notes_for_ai }}
