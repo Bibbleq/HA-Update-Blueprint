@@ -36,6 +36,18 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    ## v2025.10.9
+
+    **New Feature: AI-Powered Breaking Changes Analysis:**
+    - Use Home Assistant's conversation AI integration to analyze release notes
+    - Intelligent detection of breaking changes that may affect your specific environment
+    - Supports any AI conversation agent (OpenAI, Google Generative AI, Anthropic, local LLMs, etc.)
+    - Customizable environment context for more accurate analysis
+    - Option to skip updates when AI flags concerns or just log AI insights
+    - Works alongside keyword-based detection for comprehensive protection
+
+    Enable AI analysis with `ai_analysis_enabled: true` and configure your conversation agent for smarter update filtering.
+
     ## v2025.10.8
 
     **Enhanced Backup Detection:**
@@ -347,6 +359,74 @@ blueprint:
             This is useful for safely testing the automation configuration and seeing which updates would be applied.
             All notifications and logging will work normally, showing what would happen without making any actual changes.
           default: false
+          selector:
+            boolean:
+
+    ai_analysis_section:
+      name: AI Analysis (optional)
+      icon: mdi:robot
+      description: Use AI to analyze release notes for breaking changes that may affect your environment
+      collapsed: true
+      input:
+        ai_analysis_enabled:
+          name: Enable AI Analysis
+          description: >
+            When enabled, release notes will be sent to an AI conversation agent to analyze
+            whether breaking changes might affect your specific Home Assistant environment.
+            
+            This provides smarter breaking change detection than keyword matching alone.
+            The AI will consider your environment context (if provided) when making decisions.
+            
+            Requires a configured conversation agent (e.g., Home Assistant Cloud, OpenAI, Google Generative AI, etc.)
+          default: false
+          selector:
+            boolean:
+
+        ai_conversation_entity:
+          name: AI Conversation Agent
+          description: >
+            Select the conversation agent to use for AI analysis.
+            
+            This should be a conversation entity from an AI integration such as:
+            - Home Assistant Cloud (Assist)
+            - OpenAI Conversation
+            - Google Generative AI
+            - Anthropic
+            - Local LLMs (Ollama, LocalAI, etc.)
+            
+            Leave empty to use the default conversation agent.
+          default: []
+          selector:
+            entity:
+              multiple: false
+              domain: conversation
+
+        ai_environment_context:
+          name: Environment Context (optional)
+          description: >
+            Describe your Home Assistant environment to help the AI make better decisions.
+            
+            Include information such as:
+            - Key integrations you use (e.g., "Z-Wave, Zigbee2MQTT, HACS")
+            - Smart home platforms (e.g., "Philips Hue, Sonos, Ecobee")
+            - Custom components or automations that are critical
+            - Any specific concerns about updates
+            
+            Example: "I use Z-Wave JS, Zigbee2MQTT, and HACS. Critical automations depend on climate integration and Google Home."
+          default: ""
+          selector:
+            text:
+              multiline: true
+
+        ai_skip_on_concern:
+          name: Skip updates when AI has concerns
+          description: >
+            When enabled, updates will be skipped if the AI identifies potential breaking changes
+            that could affect your environment.
+            
+            When disabled, AI concerns will be logged but updates will proceed.
+            This is useful for monitoring what the AI would flag without blocking updates.
+          default: true
           selector:
             boolean:
 
@@ -769,6 +849,10 @@ variables:
   input_update_inclusion_mode: !input update_inclusion_mode
   input_skip_breaking_changes: !input skip_breaking_changes
   input_whatif_mode: !input whatif_mode
+  input_ai_analysis_enabled: !input ai_analysis_enabled
+  input_ai_conversation_entity: !input ai_conversation_entity
+  input_ai_environment_context: !input ai_environment_context
+  input_ai_skip_on_concern: !input ai_skip_on_concern
   input_notification_mobile_enable: !input notification_mobile_enable
   input_notification_mobile_device: !input notification_mobile_device
   input_notification_telegram_enable: !input notification_telegram_enable
@@ -1271,17 +1355,99 @@ action:
 
             - &check_breaking_changes
               variables:
-                has_breaking_changes: >
+                has_keyword_breaking_changes: >
                   {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') | lower %}
                   {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') | lower %}
                   {% set combined_text = release_summary ~ ' ' ~ release_notes %}
                   {{ input_skip_breaking_changes and ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) }}
-                
+                release_notes_for_ai: >
+                  {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') %}
+                  {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') %}
+                  {{ release_summary ~ '\n\n' ~ release_notes }}
+
+            - &check_ai_breaking_changes
+              alias: "Check AI for breaking changes"
+              if: '{{ input_ai_analysis_enabled and not has_keyword_breaking_changes and release_notes_for_ai | trim | length > 0 }}'
+              then:
+                - variables:
+                    log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}Analyzing release notes with AI for `{{ current_update_entity_friendly_name }}`..."
+                    notification_event: "update_progress"
+                - *logbook_update
+                - alias: "Call AI conversation agent"
+                  action: conversation.process
+                  data:
+                    agent_id: >
+                      {{ input_ai_conversation_entity if input_ai_conversation_entity | string | length > 0 else none }}
+                    text: >
+                      You are a Home Assistant update analyzer. Analyze these release notes and determine if there are breaking changes that could negatively affect the user's Home Assistant environment.
+                      
+                      {% if input_ai_environment_context | string | length > 0 %}
+                      USER'S ENVIRONMENT:
+                      {{ input_ai_environment_context }}
+                      {% endif %}
+                      
+                      UPDATE: {{ current_update_entity_friendly_name }}
+                      
+                      RELEASE NOTES:
+                      {{ release_notes_for_ai }}
+                      
+                      Based on the release notes{% if input_ai_environment_context | string | length > 0 %} and the user's environment{% endif %}, determine if this update has breaking changes that could cause issues.
+                      
+                      RESPOND WITH ONLY ONE OF THESE TWO OPTIONS:
+                      - "SAFE" if the update appears safe to install automatically
+                      - "CONCERN: [brief reason]" if there are potential breaking changes or concerns
+                      
+                      Be conservative - if unsure, indicate concern.
+                  response_variable: ai_response
+                  continue_on_error: true
+                - variables:
+                    ai_has_concern: >
+                      {% if ai_response is defined and ai_response.response is defined %}
+                        {% set response_text = ai_response.response.speech.plain.speech | default('') | upper %}
+                        {{ 'CONCERN' in response_text }}
+                      {% else %}
+                        false
+                      {% endif %}
+                    ai_concern_reason: >
+                      {% if ai_response is defined and ai_response.response is defined %}
+                        {% set response_text = ai_response.response.speech.plain.speech | default('') %}
+                        {% if 'CONCERN' in response_text | upper %}
+                          {{ response_text | replace('CONCERN:', '') | replace('CONCERN', '') | trim }}
+                        {% else %}
+                          {{ '' }}
+                        {% endif %}
+                      {% else %}
+                        {{ '' }}
+                      {% endif %}
+                - if: '{{ ai_has_concern }}'
+                  then:
+                    - variables:
+                        log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}AI analysis flagged potential concern for `{{ current_update_entity_friendly_name }}`: {{ ai_concern_reason }}"
+                        notification_event: "update_progress"
+                    - *logbook_update
+                    - *send_notifications
+              else:
+                - variables:
+                    ai_has_concern: false
+                    ai_concern_reason: ""
+
+            - variables:
+                has_breaking_changes: >
+                  {{ has_keyword_breaking_changes or (input_ai_analysis_enabled and input_ai_skip_on_concern and ai_has_concern | default(false)) }}
+                skip_reason: >
+                  {% if has_keyword_breaking_changes %}
+                    contains breaking changes (keyword detected)
+                  {% elif ai_has_concern | default(false) %}
+                    AI concern: {{ ai_concern_reason | default('potential breaking changes') }}
+                  {% else %}
+                    {{ '' }}
+                  {% endif %}
+
             - &check_and_skip_breaking_changes
               if: '{{ has_breaking_changes }}'
               then:
                 - variables:
-                    log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would skip{% else %}Skipping{% endif %} `{{ current_update_entity_friendly_name }}` - contains breaking changes"
+                    log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] Would skip{% else %}Skipping{% endif %} `{{ current_update_entity_friendly_name }}` - {{ skip_reason }}"
                     skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
                     processed_updates: '{{ processed_updates + [current_update_entity] }}'
                     notification_event: "update_progress"
@@ -1395,6 +1561,7 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - *check_breaking_changes
+            - *check_ai_breaking_changes
             - *check_and_skip_breaking_changes
             - if: '{{ not has_breaking_changes }}'
               then:
@@ -1453,6 +1620,7 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - *check_breaking_changes
+            - *check_ai_breaking_changes
             - *check_and_skip_breaking_changes
             - if: '{{ not has_breaking_changes }}'
               then:
@@ -1511,6 +1679,7 @@ action:
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
             - *check_breaking_changes
+            - *check_ai_breaking_changes
             - *check_and_skip_breaking_changes
             - if: '{{ not has_breaking_changes }}'
               then:
