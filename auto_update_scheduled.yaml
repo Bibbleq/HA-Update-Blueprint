@@ -1379,7 +1379,7 @@ action:
                     agent_id: >
                       {{ input_ai_conversation_entity if input_ai_conversation_entity | string | length > 0 else none }}
                     text: >
-                      You are a Home Assistant update analyzer. Analyze these release notes and determine if there are breaking changes that could negatively affect the user's Home Assistant environment.
+                      You are a Home Assistant update analyzer. Your task is to determine if an update has breaking changes that could negatively affect the user's Home Assistant environment.
                       
                       {% if input_ai_environment_context | string | length > 0 %}
                       USER'S ENVIRONMENT:
@@ -1389,17 +1389,28 @@ action:
                       UPDATE: {{ current_update_entity_friendly_name }}
                       CURRENT VERSION: {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                       NEW VERSION: {{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('unknown') }}
+                      {% set release_url = state_attr(current_update_entity, 'release_url') | default('') %}
+                      {% if release_url | length > 0 %}
+                      RELEASE URL: {{ release_url }}
+                      {% endif %}
                       
-                      RELEASE NOTES:
+                      {% if release_notes_for_ai | trim | length > 0 %}
+                      RELEASE NOTES (from Home Assistant):
                       {{ release_notes_for_ai }}
+                      {% else %}
+                      RELEASE NOTES: Not available in Home Assistant. Please check the release URL above if provided.
+                      {% endif %}
                       
-                      Based on the release notes{% if input_ai_environment_context | string | length > 0 %} and the user's environment{% endif %}, determine if this update has breaking changes that could cause issues.
+                      INSTRUCTIONS:
+                      1. If a release URL is provided and release notes are not available, please fetch and analyze the release notes from that URL.
+                      2. Look for breaking changes, deprecations, or changes that require manual intervention.
+                      3. Consider the user's environment context when evaluating impact.
                       
                       RESPOND WITH ONLY ONE OF THESE TWO OPTIONS:
                       - "SAFE" if the update appears safe to install automatically
                       - "CONCERN: [brief reason]" if there are potential breaking changes or concerns
                       
-                      Be conservative - if unsure, indicate concern.
+                      Be conservative - if you cannot access the release notes or are unsure, indicate concern.
                   response_variable: ai_response
                   continue_on_error: true
                 - variables:
