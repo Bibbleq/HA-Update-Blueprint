@@ -1457,7 +1457,7 @@ action:
                 - alias: "Log AI response for review"
                   variables:
                     log_message: >
-                      {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}AI analysis response for `{{ current_update_entity_friendly_name }}`: {{ ai_response_text }}
+                      {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}AI analysis response for `{{ current_update_entity_friendly_name }}`: {{ ai_response_text[:500] }}{% if ai_response_text | length > 500 %}... (truncated){% endif %}
                     notification_event: "ai_analysis"
                 - *logbook_update
                 - if: '{{ ai_has_concern }}'
