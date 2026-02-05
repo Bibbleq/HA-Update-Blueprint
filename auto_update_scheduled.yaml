@@ -31,7 +31,7 @@ blueprint:
   author: Edward Firmo (https://github.com/edwardtfn)
   homeassistant:
     min_version: '2024.8.0'
-  description: >
+  description: |
     # Home Assistant Auto-update
 
     Update Home Assistant automatically when a new update is available.
