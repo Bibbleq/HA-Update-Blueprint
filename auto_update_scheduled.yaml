@@ -36,6 +36,19 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    **Current Version: v2025.10.10** - Fixed backup age check for modern HA backup sensors.
+
+    <details>
+    <summary>📋 Click to view version history and changelog</summary>
+
+    ## v2025.10.10
+
+    **Fixed Backup Age Check for Modern HA:**
+    - Fixed backup age validation failing with "No backup entity with last_backup attribute found"
+    - Now uses `sensor.backup_last_successful_automatic_backup` state (modern HA) as primary check
+    - Falls back to legacy sensors with `last_backup` attribute for backwards compatibility
+    - Improved error message clarity when no backup entity is found
+
     ## v2025.10.9
 
     **New Feature: AI-Powered Breaking Changes Analysis:**
@@ -57,7 +70,7 @@ blueprint:
     - Fallback trigger: Monitors `sensor.backup_last_successful_automatic_backup` updates
     - Added backup duration tracking and detection method logging for diagnostics
     - Removed polling delays for more responsive backup completion detection
-    - Deprecated `backup_location` input (now uses HA's configured backup location)
+    - Removed `backup_location` input (now uses HA's configured backup location)
 
     Event-driven monitoring provides faster, more reliable backup completion detection without delays.
 
@@ -92,7 +105,7 @@ blueprint:
     If you want to continue automatically applying all updates including breaking changes, 
     you must explicitly set this to `false` in your automation configuration.
 
-    ## v2025.10.2
+    </details>
 
     ## Attention:
 
@@ -462,9 +475,10 @@ blueprint:
           name: Maximum backup age (or zero, to disable) (optional)
           description:
             This checks the age of the most recent backup using Home Assistant's native
-            backup entities. The automation will check for any sensor with a `last_backup`
-            attribute and verify that at least one backup exists within the specified age limit.
-            This setting only validates existing backups, not the backups created by this blueprint.
+            backup entities. The automation first checks `sensor.backup_last_successful_automatic_backup`
+            (modern HA backup sensor), then falls back to checking any sensor with a `last_backup`
+            attribute for backwards compatibility. This setting only validates existing backups,
+            not the backups created by this blueprint.
           default:
             days: 0
             hours: 0
@@ -473,19 +487,6 @@ blueprint:
           selector:
             duration:
               enable_day: true
-
-        backup_location:
-          name: Backup Location (Deprecated)
-          description: >-
-            NOTE: This option is deprecated and no longer used. The blueprint now uses
-            the automatic backup service which stores backups in Home Assistant's configured
-            backup location. This input is kept for backward compatibility only.
-            
-            You can configure backup storage locations under
-            [Settings > System > Storage](https://my.home-assistant.io/redirect/storage/).
-          default: "/backup"
-          selector:
-            backup_location:
 
     actions_section:
       name: Actions (optional)
@@ -1185,16 +1186,25 @@ action:
           - '{{ input_max_backup_age_seconds > 0 }}'
         then:
           - variables:
-              last_backup_timestamp_list: >
+              # Modern HA backup sensor (state contains the last backup timestamp)
+              modern_backup_sensor_state: >
+                {{ states('sensor.backup_last_successful_automatic_backup') }}
+              modern_backup_timestamp: >
+                {{ modern_backup_sensor_state if modern_backup_sensor_state not in ['unknown', 'unavailable', ''] else None }}
+              # Legacy sensors with last_backup attribute (for backwards compatibility)
+              legacy_backup_timestamp_list: >
                 {{
                   states.sensor
                   | selectattr("attributes.last_backup", "defined")
                   | map(attribute="attributes.last_backup")
                   | list
                 }}
-              last_backup_timestamp: '{{ last_backup_timestamp_list | max if last_backup_timestamp_list | count > 0 else None }}'
+              legacy_backup_timestamp: '{{ legacy_backup_timestamp_list | max if legacy_backup_timestamp_list | count > 0 else None }}'
+              # Use modern sensor if available, otherwise fall back to legacy (default to None if neither found)
+              last_backup_timestamp: >
+                {{ modern_backup_timestamp if modern_backup_timestamp != None else (legacy_backup_timestamp if legacy_backup_timestamp != None else None) }}
           - alias: Check if any backup entity was found
-            if: '{{ last_backup_timestamp != None }}'
+            if: '{{ last_backup_timestamp != None and last_backup_timestamp | string | trim | length > 0 }}'
             then:
               - alias: Check age of last backup
                 if: >-
@@ -1208,11 +1218,11 @@ action:
                   - stop: "Last backup is too old"
             else:
               - variables:
-                  log_message: "No backup entity with last_backup attribute found"
+                  log_message: "No backup entity found"
                   notification_event: "backup"
               - *logbook_update
               - *send_notifications
-              - stop: "No backup entity with last_backup attribute found"
+              - stop: "No backup entity found"
       - alias: "Backup"
         continue_on_error: true
         if:
@@ -1414,6 +1424,14 @@ action:
                   response_variable: ai_response
                   continue_on_error: true
                 - variables:
+                    ai_response_text: >
+                      {% if ai_response is defined and ai_response.response is defined %}
+                        {% set speech_data = ai_response.response.speech | default({}) %}
+                        {% set plain_data = speech_data.plain | default({}) %}
+                        {{ plain_data.speech | default('No response received') }}
+                      {% else %}
+                        No response received from AI agent
+                      {% endif %}
                     ai_has_concern: >
                       {% if ai_response is defined and ai_response.response is defined %}
                         {% set speech_data = ai_response.response.speech | default({}) %}
@@ -1436,6 +1454,12 @@ action:
                       {% else %}
                         {{ '' }}
                       {% endif %}
+                - alias: "Log AI response for review"
+                  variables:
+                    log_message: >
+                      {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}AI analysis response for `{{ current_update_entity_friendly_name }}`: {{ ai_response_text[:500] }}{% if ai_response_text | length > 500 %}... (truncated){% endif %}
+                    notification_event: "ai_analysis"
+                - *logbook_update
                 - if: '{{ ai_has_concern }}'
                   then:
                     - variables:

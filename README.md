@@ -5,7 +5,17 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
-## 🎉 Latest Update - v2025.10.9
+## 🎉 Latest Update - v2025.10.10
+
+**Fixed Backup Age Check for Modern HA:**
+- **Fixed Error:** Resolved "No backup entity with last_backup attribute found" error
+- **Modern HA Support:** Now uses `sensor.backup_last_successful_automatic_backup` state as primary check
+- **Backwards Compatible:** Falls back to legacy sensors with `last_backup` attribute
+- **Improved Error Messages:** Clearer messaging when no backup entity is found
+
+**Impact:** The backup age validation now works correctly with modern Home Assistant backup integration.
+
+## Previous Update - v2025.10.9
 
 **New Feature: AI-Powered Breaking Changes Analysis:**
 - **Smart Analysis:** Use Home Assistant's conversation AI integration to analyze release notes
@@ -26,7 +36,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Fallback: Monitors `sensor.backup_last_successful_automatic_backup` updates
 - **Better Diagnostics:** Logs backup duration and detection method used
 - **No More Polling Delays:** Instant detection when backup completes, no unnecessary waiting
-- **Deprecated:** `backup_location` input (now uses HA's configured backup location)
+- **Removed:** `backup_location` input (now uses HA's configured backup location)
 
 **Impact:** Backups are detected as soon as they complete, reducing automation run time and eliminating false timeout warnings. See changelog for full details.
 
@@ -61,6 +71,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Supports any AI conversation agent (OpenAI, Google Generative AI, Anthropic, local LLMs, etc.)
   - Customizable environment context for more accurate analysis
   - Option to skip updates when AI flags concerns or just log AI insights
+  - **AI query and response logged to System Log for review**
   - Works alongside keyword-based detection for comprehensive protection
 
 - **💾 Automatic Backups**
@@ -306,7 +317,20 @@ notification_mobile_device: mobile_app_my_phone
 
 ## 📋 Version History
 
-### v2025.10.9 (Current)
+### v2025.10.10 (Current)
+
+**🔧 Fixed Backup Age Check for Modern HA:**
+- Fixed "No backup entity with last_backup attribute found" error
+- Now uses `sensor.backup_last_successful_automatic_backup` state as primary check
+- Falls back to legacy sensors with `last_backup` attribute for backwards compatibility
+- Improved error message clarity when no backup entity is found
+
+**Impact:**
+- ✅ Backup age validation works with modern Home Assistant backup integration
+- ✅ Backwards compatible with older backup sensor formats
+- ✅ Clearer error messages for troubleshooting
+
+### v2025.10.9
 
 **🤖 New Feature: AI-Powered Breaking Changes Analysis:**
 - Use Home Assistant's conversation AI integration to analyze release notes
@@ -337,7 +361,7 @@ notification_mobile_device: mobile_app_my_phone
 - Fallback trigger: `sensor.backup_last_successful_automatic_backup` updates
 - Added backup duration tracking and detection method logging
 - Removed polling delays for instant completion detection
-- Deprecated `backup_location` input (uses HA's configured backup location)
+- Removed `backup_location` input (uses HA's configured backup location)
 
 **Impact:**
 - ✅ Faster backup completion detection (no polling delays)
