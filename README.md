@@ -71,6 +71,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Supports any AI conversation agent (OpenAI, Google Generative AI, Anthropic, local LLMs, etc.)
   - Customizable environment context for more accurate analysis
   - Option to skip updates when AI flags concerns or just log AI insights
+  - **AI query and response logged to System Log for review**
   - Works alongside keyword-based detection for comprehensive protection
 
 - **💾 Automatic Backups**

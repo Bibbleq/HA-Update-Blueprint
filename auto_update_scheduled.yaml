@@ -1424,6 +1424,14 @@ action:
                   response_variable: ai_response
                   continue_on_error: true
                 - variables:
+                    ai_response_text: >
+                      {% if ai_response is defined and ai_response.response is defined %}
+                        {% set speech_data = ai_response.response.speech | default({}) %}
+                        {% set plain_data = speech_data.plain | default({}) %}
+                        {{ plain_data.speech | default('No response received') }}
+                      {% else %}
+                        No response received from AI agent
+                      {% endif %}
                     ai_has_concern: >
                       {% if ai_response is defined and ai_response.response is defined %}
                         {% set speech_data = ai_response.response.speech | default({}) %}
@@ -1446,6 +1454,12 @@ action:
                       {% else %}
                         {{ '' }}
                       {% endif %}
+                - alias: "Log AI response for review"
+                  variables:
+                    log_message: >
+                      {% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}AI analysis response for `{{ current_update_entity_friendly_name }}`: {{ ai_response_text }}
+                    notification_event: "ai_analysis"
+                - *logbook_update
                 - if: '{{ ai_has_concern }}'
                   then:
                     - variables:
