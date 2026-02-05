@@ -773,7 +773,7 @@ trigger:
         states.update
         | default([])
         | selectattr("state", "eq", "on")
-        | rejectattr("entity_id", "in", input_update_exclusions)
+        | rejectattr("entity_id", "in", input_update_exclusions | default([]))
         | list | count | int(0) > 0
       }}
   - id: New day
@@ -808,7 +808,7 @@ condition:
                 states.update
                 | default([])
                 | selectattr("state", "eq", "on")
-                | rejectattr("entity_id", "in", input_update_exclusions)
+                | rejectattr("entity_id", "in", input_update_exclusions | default([]))
                 | list | count | int(0) > 0
               }}
       - condition: and
