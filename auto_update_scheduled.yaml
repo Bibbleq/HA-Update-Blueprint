@@ -1287,7 +1287,7 @@ action:
 
               - variables:
                   backup_completed: '{{ wait.completed | default(false) }}'
-                  backup_duration_seconds: '{{ (now() - backup_start_time).total_seconds() | int(0) }}'
+                  backup_duration_seconds: '{{ (now() - (backup_start_time | as_datetime)).total_seconds() | int(0) }}'
                   backup_detection_method: >
                     {% if wait.trigger is defined and wait.trigger.entity_id is defined %}
                       {% if wait.trigger.entity_id == "sensor.backup_backup_manager_state" %}
