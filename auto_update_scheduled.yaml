@@ -1389,6 +1389,9 @@ action:
                   {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') %}
                   {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') %}
                   {{ release_summary ~ '\n\n' ~ release_notes }}
+                # Reset AI-related variables at start of each update check to prevent carryover
+                ai_has_concern: false
+                ai_concern_reason: ""
 
             - &check_ai_breaking_changes
               alias: "Check AI for breaking changes"
@@ -1491,7 +1494,8 @@ action:
                     ai_has_concern: false
                     ai_concern_reason: ""
 
-            - variables:
+            - &calculate_breaking_changes
+              variables:
                 has_breaking_changes: >
                   {{ has_keyword_breaking_changes or (input_ai_analysis_enabled and input_ai_skip_on_concern and ai_has_concern | default(false)) }}
                 skip_reason: >
@@ -1622,6 +1626,7 @@ action:
 
             - *check_breaking_changes
             - *check_ai_breaking_changes
+            - *calculate_breaking_changes
             - *check_and_skip_breaking_changes
             - if: '{{ not has_breaking_changes }}'
               then:
@@ -1681,6 +1686,7 @@ action:
 
             - *check_breaking_changes
             - *check_ai_breaking_changes
+            - *calculate_breaking_changes
             - *check_and_skip_breaking_changes
             - if: '{{ not has_breaking_changes }}'
               then:
@@ -1740,6 +1746,7 @@ action:
 
             - *check_breaking_changes
             - *check_ai_breaking_changes
+            - *calculate_breaking_changes
             - *check_and_skip_breaking_changes
             - if: '{{ not has_breaking_changes }}'
               then:
