@@ -1243,11 +1243,12 @@ action:
               {# Create backup if NOT (recent backup exists OR already running) #}
               {# In other words, skip backup if recent backup OR already running #}
               {% set backup_sensor = states('sensor.backup_last_successful_automatic_backup') %}
-              {% set has_recent_backup = false %}
               {% if backup_sensor not in ['unknown', 'unavailable', ''] %}
                 {% set has_recent_backup = (as_timestamp(now()) - as_timestamp(backup_sensor)) <= 3600 %}
+                {{ not (has_recent_backup or is_resume_after_restart) }}
+              {% else %}
+                {{ not is_resume_after_restart }}
               {% endif %}
-              {{ not (has_recent_backup or is_resume_after_restart) }}
         then:
           - if: '{{ input_whatif_mode }}'
             then:
@@ -1692,7 +1693,7 @@ action:
                 latest_parts: "{{ current_latest_version.split('.') }}"
                 # Determine version change type
                 version_change_type: >
-                  {% if installed_parts[0] != latest_parts[0] %}
+                  {% if installed_parts | length > 0 and latest_parts | length > 0 and installed_parts[0] != latest_parts[0] %}
                     major
                   {% elif installed_parts | length > 1 and latest_parts | length > 1 and installed_parts[1] != latest_parts[1] %}
                     minor
@@ -1790,7 +1791,7 @@ action:
                 latest_parts: "{{ current_latest_version.split('.') }}"
                 # Determine version change type
                 version_change_type: >
-                  {% if installed_parts[0] != latest_parts[0] %}
+                  {% if installed_parts | length > 0 and latest_parts | length > 0 and installed_parts[0] != latest_parts[0] %}
                     major
                   {% elif installed_parts | length > 1 and latest_parts | length > 1 and installed_parts[1] != latest_parts[1] %}
                     minor
