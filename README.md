@@ -36,7 +36,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Fallback: Monitors `sensor.backup_last_successful_automatic_backup` updates
 - **Better Diagnostics:** Logs backup duration and detection method used
 - **No More Polling Delays:** Instant detection when backup completes, no unnecessary waiting
-- **Deprecated:** `backup_location` input (now uses HA's configured backup location)
+- **Removed:** `backup_location` input (now uses HA's configured backup location)
 
 **Impact:** Backups are detected as soon as they complete, reducing automation run time and eliminating false timeout warnings. See changelog for full details.
 
@@ -360,7 +360,7 @@ notification_mobile_device: mobile_app_my_phone
 - Fallback trigger: `sensor.backup_last_successful_automatic_backup` updates
 - Added backup duration tracking and detection method logging
 - Removed polling delays for instant completion detection
-- Deprecated `backup_location` input (uses HA's configured backup location)
+- Removed `backup_location` input (uses HA's configured backup location)
 
 **Impact:**
 - ✅ Faster backup completion detection (no polling delays)

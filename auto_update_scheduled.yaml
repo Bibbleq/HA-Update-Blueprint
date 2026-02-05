@@ -70,7 +70,7 @@ blueprint:
     - Fallback trigger: Monitors `sensor.backup_last_successful_automatic_backup` updates
     - Added backup duration tracking and detection method logging for diagnostics
     - Removed polling delays for more responsive backup completion detection
-    - Deprecated `backup_location` input (now uses HA's configured backup location)
+    - Removed `backup_location` input (now uses HA's configured backup location)
 
     Event-driven monitoring provides faster, more reliable backup completion detection without delays.
 
@@ -487,19 +487,6 @@ blueprint:
           selector:
             duration:
               enable_day: true
-
-        backup_location:
-          name: Backup Location (Deprecated)
-          description: >-
-            NOTE: This option is deprecated and no longer used. The blueprint now uses
-            the automatic backup service which stores backups in Home Assistant's configured
-            backup location. This input is kept for backward compatibility only.
-            
-            You can configure backup storage locations under
-            [Settings > System > Storage](https://my.home-assistant.io/redirect/storage/).
-          default: "/backup"
-          selector:
-            backup_location:
 
     actions_section:
       name: Actions (optional)
