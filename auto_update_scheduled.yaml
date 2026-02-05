@@ -36,10 +36,21 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
-    **Current Version: v2025.10.10** - Fixed backup age check for modern HA backup sensors.
+    **Current Version: v2025.10.11** - Improved backup deduplication using timestamp checking.
 
     <details>
     <summary>📋 Click to view version history and changelog</summary>
+
+    ## v2025.10.11
+
+    **Improved Backup Deduplication:**
+    - Enhanced backup creation logic to check actual backup timestamps
+    - Prevents duplicate backups within 1 hour, regardless of source
+    - Respects backups created by any process, not just this automation
+    - Helper entity now truly optional (only used for resume-after-restart detection)
+    - Uses `sensor.backup_last_successful_automatic_backup` for timestamp checking
+
+    **Impact:** More reliable backup management with better deduplication.
 
     ## v2025.10.10
 
@@ -1227,12 +1238,16 @@ action:
         continue_on_error: true
         if:
           - '{{ input_backup_bool }}'
-          - condition: or
-            conditions:
-              - '{{ input_update_process_started_entity | string | length == 0 }}'
-              - condition: state
-                entity_id: !input update_process_started_entity
-                state: 'off'
+          - '{{ not is_resume_after_restart }}'
+          - condition: template
+            value_template: >
+              {# Only create backup if last one is older than 1 hour (3600 seconds) #}
+              {% set backup_sensor = states('sensor.backup_last_successful_automatic_backup') %}
+              {% if backup_sensor not in ['unknown', 'unavailable', ''] %}
+                {{ (as_timestamp(now()) - as_timestamp(backup_sensor)) > 3600 }}
+              {% else %}
+                true
+              {% endif %}
         then:
           - if: '{{ input_whatif_mode }}'
             then:

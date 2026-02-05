@@ -5,7 +5,18 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
-## 🎉 Latest Update - v2025.10.10
+## 🎉 Latest Update - v2025.10.11
+
+**Improved Backup Deduplication:**
+- **Smart Timestamp Checking:** Enhanced backup creation logic to check actual backup timestamps
+- **1-Hour Deduplication:** Prevents duplicate backups within 1 hour, regardless of source
+- **Respects All Backups:** Works with backups created by any process, not just this automation
+- **Helper Entity Optional:** Now truly optional - only used for resume-after-restart detection
+- **Modern HA Support:** Uses `sensor.backup_last_successful_automatic_backup` for timestamp checking
+
+**Impact:** More reliable backup management with better deduplication and reduced storage usage.
+
+## Previous Update - v2025.10.10
 
 **Fixed Backup Age Check for Modern HA:**
 - **Fixed Error:** Resolved "No backup entity with last_backup attribute found" error
@@ -114,6 +125,15 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Tracks update progress using optional helper entity
   - Handles interruptions gracefully
 
+### Backup Management
+
+- **🔄 Smart Backup Deduplication**
+  - Automatically prevents duplicate backups within 1 hour
+  - Respects backups created by ANY process (not just this automation)
+  - Uses `sensor.backup_last_successful_automatic_backup` for modern HA
+  - Falls back to checking if automation is resuming after restart
+  - Optional helper entity for resume-after-restart detection
+
 ### Notification & Logging
 
 - **📱 Mobile App Notifications**
@@ -194,7 +214,8 @@ update_exclusions:
 update_types_exclusions:
   - device_update                     # Skip firmware updates
 
-# Helper Entity (optional)
+# Helper Entity (optional - used for resume-after-restart detection)
+# Note: Backup deduplication now uses timestamp checking, so this is truly optional
 update_process_started_entity: input_boolean.update_in_progress
 
 # Pause Control (optional)
