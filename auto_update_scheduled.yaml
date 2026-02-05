@@ -1238,15 +1238,16 @@ action:
         continue_on_error: true
         if:
           - '{{ input_backup_bool }}'
-          - '{{ not is_resume_after_restart }}'
           - condition: template
             value_template: >
-              {# Only create backup if last one is older than 1 hour (3600 seconds) #}
+              {# Create backup if NOT (recent backup exists OR already running) #}
+              {# In other words, skip backup if recent backup OR already running #}
               {% set backup_sensor = states('sensor.backup_last_successful_automatic_backup') %}
               {% if backup_sensor not in ['unknown', 'unavailable', ''] %}
-                {{ (as_timestamp(now()) - as_timestamp(backup_sensor)) > 3600 }}
+                {% set has_recent_backup = (as_timestamp(now()) - as_timestamp(backup_sensor)) <= 3600 %}
+                {{ not (has_recent_backup or is_resume_after_restart) }}
               {% else %}
-                true
+                {{ not is_resume_after_restart }}
               {% endif %}
         then:
           - if: '{{ input_whatif_mode }}'
@@ -1684,6 +1685,44 @@ action:
                 current_update_entity_friendly_name: |
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
 
+            - variables:
+                current_installed_version: "{{ state_attr(current_update_entity, 'installed_version') | default('0.0.0') }}"
+                current_latest_version: "{{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('0.0.0') }}"
+                # Parse version numbers (assuming format YYYY.MM.PP or similar)
+                installed_parts: "{{ current_installed_version.split('.') }}"
+                latest_parts: "{{ current_latest_version.split('.') }}"
+                # Determine version change type
+                version_change_type: >
+                  {% if installed_parts | length > 0 and latest_parts | length > 0 and installed_parts[0] != latest_parts[0] %}
+                    major
+                  {% elif installed_parts | length > 1 and latest_parts | length > 1 and installed_parts[1] != latest_parts[1] %}
+                    minor
+                  {% else %}
+                    patch
+                  {% endif %}
+                # Check if update is allowed based on mode
+                update_allowed_by_version_mode: >
+                  {% if input_core_os_update_mode == 'all' %}
+                    true
+                  {% elif input_core_os_update_mode == 'major_and_minor' %}
+                    {{ version_change_type in ['minor', 'patch'] }}
+                  {% elif input_core_os_update_mode == 'patches' %}
+                    {{ version_change_type == 'patch' }}
+                  {% else %}
+                    false
+                  {% endif %}
+            
+            # Skip this update if version mode doesn't allow it
+            - if: '{{ not update_allowed_by_version_mode }}'
+              then:
+                - variables:
+                    log_message: "Skipping `{{ current_update_entity_friendly_name }}` - {{ version_change_type }} version change not allowed by update mode ({{ input_core_os_update_mode }})"
+                    skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
+                    processed_updates: '{{ processed_updates + [current_update_entity] }}'
+                    notification_event: "update_progress"
+                - *logbook_update
+                - *send_notifications
+
             - *check_breaking_changes
             - *check_ai_breaking_changes
             - *calculate_breaking_changes
@@ -1743,6 +1782,44 @@ action:
                 current_update_entity: '{{ updates_pending[0] }}'
                 current_update_entity_friendly_name: |
                   {{ state_attr(current_update_entity, "friendly_name") | default(current_update_entity) }}
+
+            - variables:
+                current_installed_version: "{{ state_attr(current_update_entity, 'installed_version') | default('0.0.0') }}"
+                current_latest_version: "{{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('0.0.0') }}"
+                # Parse version numbers (assuming format YYYY.MM.PP or similar)
+                installed_parts: "{{ current_installed_version.split('.') }}"
+                latest_parts: "{{ current_latest_version.split('.') }}"
+                # Determine version change type
+                version_change_type: >
+                  {% if installed_parts | length > 0 and latest_parts | length > 0 and installed_parts[0] != latest_parts[0] %}
+                    major
+                  {% elif installed_parts | length > 1 and latest_parts | length > 1 and installed_parts[1] != latest_parts[1] %}
+                    minor
+                  {% else %}
+                    patch
+                  {% endif %}
+                # Check if update is allowed based on mode
+                update_allowed_by_version_mode: >
+                  {% if input_core_os_update_mode == 'all' %}
+                    true
+                  {% elif input_core_os_update_mode == 'major_and_minor' %}
+                    {{ version_change_type in ['minor', 'patch'] }}
+                  {% elif input_core_os_update_mode == 'patches' %}
+                    {{ version_change_type == 'patch' }}
+                  {% else %}
+                    false
+                  {% endif %}
+            
+            # Skip this update if version mode doesn't allow it
+            - if: '{{ not update_allowed_by_version_mode }}'
+              then:
+                - variables:
+                    log_message: "Skipping `{{ current_update_entity_friendly_name }}` - {{ version_change_type }} version change not allowed by update mode ({{ input_core_os_update_mode }})"
+                    skipped_updates: '{{ skipped_updates + [current_update_entity_friendly_name] }}'
+                    processed_updates: '{{ processed_updates + [current_update_entity] }}'
+                    notification_event: "update_progress"
+                - *logbook_update
+                - *send_notifications
 
             - *check_breaking_changes
             - *check_ai_breaking_changes
