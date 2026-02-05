@@ -1213,13 +1213,9 @@ action:
                   | list
                 }}
               legacy_backup_timestamp: '{{ legacy_backup_timestamp_list | max if legacy_backup_timestamp_list | count > 0 else None }}'
-              # Use modern sensor if available, otherwise fall back to legacy
+              # Use modern sensor if available, otherwise fall back to legacy (default to None if neither found)
               last_backup_timestamp: >
-                {% if modern_backup_timestamp != None %}
-                  {{ modern_backup_timestamp }}
-                {% elif legacy_backup_timestamp != None %}
-                  {{ legacy_backup_timestamp }}
-                {% endif %}
+                {{ modern_backup_timestamp if modern_backup_timestamp != None else (legacy_backup_timestamp if legacy_backup_timestamp != None else None) }}
           - alias: Check if any backup entity was found
             if: '{{ last_backup_timestamp != None and last_backup_timestamp | string | trim | length > 0 }}'
             then:
@@ -1235,7 +1231,7 @@ action:
                   - stop: "Last backup is too old"
             else:
               - variables:
-                  log_message: "No backup entity found (checked sensor.backup_last_successful_automatic_backup and sensors with last_backup attribute)"
+                  log_message: "No backup entity found"
                   notification_event: "backup"
               - *logbook_update
               - *send_notifications
