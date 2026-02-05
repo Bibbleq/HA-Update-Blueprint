@@ -110,7 +110,7 @@ Version 2025.10.10 fixes a critical bug where the backup age validation was fail
 
 ### 🔗 References
 
-- Issue: [Fails to run with backup error](https://github.com/Bibbleq/HA-Update-Blueprint/issues/XXX)
+- Issue: [Fails to run with backup error](https://github.com/Bibbleq/HA-Update-Blueprint/issues)
 
 ---
 

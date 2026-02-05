@@ -36,6 +36,11 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
+    **Current Version: v2025.10.10** - Fixed backup age check for modern HA backup sensors.
+
+    <details>
+    <summary>📋 Click to view version history and changelog</summary>
+
     ## v2025.10.10
 
     **Fixed Backup Age Check for Modern HA:**
@@ -100,7 +105,7 @@ blueprint:
     If you want to continue automatically applying all updates including breaking changes, 
     you must explicitly set this to `false` in your automation configuration.
 
-    ## v2025.10.2
+    </details>
 
     ## Attention:
 
@@ -1214,8 +1219,6 @@ action:
                   {{ modern_backup_timestamp }}
                 {% elif legacy_backup_timestamp != None %}
                   {{ legacy_backup_timestamp }}
-                {% else %}
-                  {{ None }}
                 {% endif %}
           - alias: Check if any backup entity was found
             if: '{{ last_backup_timestamp != None and last_backup_timestamp | string | trim | length > 0 }}'
