@@ -112,7 +112,7 @@ This document provides test scenarios to verify the backup functionality works c
    - `backup_bool: true`
    - `max_backup_age: 1 day` (or other non-zero value)
 2. Ensure a recent backup exists (within the age limit)
-3. Ensure backup sensors with `last_backup` attribute exist
+3. Ensure `sensor.backup_last_successful_automatic_backup` exists (modern HA) or backup sensors with `last_backup` attribute exist (legacy)
 4. Ensure updates are available
 5. Enable the schedule
 
@@ -129,8 +129,8 @@ This document provides test scenarios to verify the backup functionality works c
 
 **If Test Fails:**
 - If automation stops with "Last backup is too old", verify a recent backup exists
-- If automation stops with "No backup entity found", check that backup sensors are available
-- Check sensor states in Developer Tools > States for sensors with `last_backup` attribute
+- If automation stops with "No backup entity found", check that `sensor.backup_last_successful_automatic_backup` exists (modern HA) or check for sensors with `last_backup` attribute (legacy)
+- Check sensor states in Developer Tools > States
 
 ---
 
@@ -172,7 +172,7 @@ This document provides test scenarios to verify the backup functionality works c
    - Look for errors in automation trace
 
 3. **Backup age check failing**
-   - Verify backup sensors exist with `last_backup` attribute
+   - Verify `sensor.backup_last_successful_automatic_backup` exists (modern HA) or backup sensors exist with `last_backup` attribute (legacy)
    - Check sensor values are recent enough
    - Consider setting `max_backup_age: 0` to disable this check
 
@@ -200,6 +200,7 @@ This document provides test scenarios to verify the backup functionality works c
 
 ## Version History
 
+- **v2025.10.10**: Fixed backup age check to use modern HA backup sensor (`sensor.backup_last_successful_automatic_backup`) with fallback to legacy sensors
 - **v2025.10.6**: Added tests for backup creation fix (helper entity timing issue)
 - **v2025.10.5**: Fixed What-If mode infinite loop
 - **v2025.10.4**: Added What-If mode feature

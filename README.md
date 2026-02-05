@@ -5,7 +5,17 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
-## 🎉 Latest Update - v2025.10.9
+## 🎉 Latest Update - v2025.10.10
+
+**Fixed Backup Age Check for Modern HA:**
+- **Fixed Error:** Resolved "No backup entity with last_backup attribute found" error
+- **Modern HA Support:** Now uses `sensor.backup_last_successful_automatic_backup` state as primary check
+- **Backwards Compatible:** Falls back to legacy sensors with `last_backup` attribute
+- **Improved Error Messages:** Clearer messaging when no backup entity is found
+
+**Impact:** The backup age validation now works correctly with modern Home Assistant backup integration.
+
+## Previous Update - v2025.10.9
 
 **New Feature: AI-Powered Breaking Changes Analysis:**
 - **Smart Analysis:** Use Home Assistant's conversation AI integration to analyze release notes
@@ -306,7 +316,20 @@ notification_mobile_device: mobile_app_my_phone
 
 ## 📋 Version History
 
-### v2025.10.9 (Current)
+### v2025.10.10 (Current)
+
+**🔧 Fixed Backup Age Check for Modern HA:**
+- Fixed "No backup entity with last_backup attribute found" error
+- Now uses `sensor.backup_last_successful_automatic_backup` state as primary check
+- Falls back to legacy sensors with `last_backup` attribute for backwards compatibility
+- Improved error message clarity when no backup entity is found
+
+**Impact:**
+- ✅ Backup age validation works with modern Home Assistant backup integration
+- ✅ Backwards compatible with older backup sensor formats
+- ✅ Clearer error messages for troubleshooting
+
+### v2025.10.9
 
 **🤖 New Feature: AI-Powered Breaking Changes Analysis:**
 - Use Home Assistant's conversation AI integration to analyze release notes
