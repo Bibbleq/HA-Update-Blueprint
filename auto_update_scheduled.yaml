@@ -1406,22 +1406,25 @@ action:
                     text: >
                       You are a Home Assistant update analyzer. Your task is to determine if an update has breaking changes that could negatively affect the user's Home Assistant environment.
                       
-                      {% if input_ai_environment_context | string | length > 0 %}
+                      {% set env_context = (input_ai_environment_context if input_ai_environment_context else '') | string %}
+                      {% if env_context | length > 0 %}
                       USER'S ENVIRONMENT:
-                      {{ input_ai_environment_context }}
+                      {{ env_context }}
                       {% endif %}
                       
                       UPDATE: {{ current_update_entity_friendly_name }}
                       CURRENT VERSION: {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                       NEW VERSION: {{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('unknown') }}
-                      {% set release_url = state_attr(current_update_entity, 'release_url') | default('') %}
+                      {% set release_url_raw = state_attr(current_update_entity, 'release_url') %}
+                      {% set release_url = (release_url_raw if release_url_raw else '') | string %}
                       {% if release_url | length > 0 %}
                       RELEASE URL: {{ release_url }}
                       {% endif %}
                       
-                      {% if release_notes_for_ai | trim | length > 0 %}
+                      {% set notes = (release_notes_for_ai if release_notes_for_ai else '') | string | trim %}
+                      {% if notes | length > 0 %}
                       RELEASE NOTES (from Home Assistant):
-                      {{ release_notes_for_ai }}
+                      {{ notes }}
                       {% else %}
                       RELEASE NOTES: Not available in Home Assistant. Please check the release URL above if provided.
                       {% endif %}
