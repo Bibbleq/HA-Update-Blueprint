@@ -1415,7 +1415,8 @@ action:
                       UPDATE: {{ current_update_entity_friendly_name }}
                       CURRENT VERSION: {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                       NEW VERSION: {{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('unknown') }}
-                      {% set release_url = (state_attr(current_update_entity, 'release_url') if state_attr(current_update_entity, 'release_url') else '') | string %}
+                      {% set release_url_raw = state_attr(current_update_entity, 'release_url') %}
+                      {% set release_url = (release_url_raw if release_url_raw else '') | string %}
                       {% if release_url | length > 0 %}
                       RELEASE URL: {{ release_url }}
                       {% endif %}
