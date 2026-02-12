@@ -20,7 +20,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
 - **Smart Timestamp Checking:** Enhanced backup creation logic to check actual backup timestamps
 - **1-Hour Deduplication:** Prevents duplicate backups within 1 hour, regardless of source
 - **Respects All Backups:** Works with backups created by any process, not just this automation
-- **Helper Entity Optional:** Now truly optional - only used for resume-after-restart detection
+- **Simplified Architecture:** Removed resume-after-restart logic for cleaner, more reliable operation
 - **Modern HA Support:** Uses `sensor.backup_last_successful_automatic_backup` for timestamp checking
 
 **Impact:** More reliable backup management with better deduplication and reduced storage usage.
@@ -100,8 +100,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Uses Home Assistant's native automatic backup service
   - Dual trigger system (state transition + fallback)
   - Logs backup duration and detection method
-  - Works with or without helper entity configuration
-  - Optional control via helper entity state
+  - Timestamp-based deduplication (no helper entity needed)
 
 - **👤 Person Presence Check**
   - Only run updates when specific person is home
@@ -128,11 +127,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Type-based filtering (skip specific update types)
   - Schedule-based execution
   - Priority ordering (generic → firmware → core → OS)
-
-- **🔄 Resume After Restart**
-  - Automatically resumes update process after Home Assistant restarts
-  - Tracks update progress using optional helper entity
-  - Handles interruptions gracefully
+  - All safeguards applied consistently (version mode, AI analysis, breaking change detection)
 
 ### Backup Management
 
@@ -140,8 +135,7 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
   - Automatically prevents duplicate backups within 1 hour
   - Respects backups created by ANY process (not just this automation)
   - Uses `sensor.backup_last_successful_automatic_backup` for modern HA
-  - Falls back to checking if automation is resuming after restart
-  - Optional helper entity for resume-after-restart detection
+  - Timestamp-based deduplication ensures reliability
 
 ### Notification & Logging
 
@@ -222,10 +216,6 @@ update_exclusions:
   
 update_types_exclusions:
   - device_update                     # Skip firmware updates
-
-# Helper Entity (optional - used for resume-after-restart detection)
-# Note: Backup deduplication now uses timestamp checking, so this is truly optional
-update_process_started_entity: input_boolean.update_in_progress
 
 # Pause Control (optional)
 pause_entities:
@@ -522,26 +512,23 @@ All changes maintain backward compatibility except for the `skip_breaking_change
 
 ## 🧪 Testing Scenarios
 
-### Scenario 1: No Helper Entity + Breaking Changes (Default)
+### Scenario 1: Breaking Changes Detection
 **Setup:**
-- `update_process_started_entity`: Not configured
 - `backup_bool`: true
 - `skip_breaking_changes`: true
 
 **Expected:**
-- ✅ Backup is created
+- ✅ Backup is created (if no recent backup)
 - ✅ Update with breaking changes is skipped
 - ✅ Notification sent about skipped update
 
-### Scenario 2: With Helper Entity + Normal Updates
+### Scenario 2: Normal Updates
 **Setup:**
-- `update_process_started_entity`: Configured, state is 'off'
 - `backup_bool`: true
 - Update available without breaking changes
 
 **Expected:**
-- ✅ Backup is created
-- ✅ Helper entity set to 'on'
+- ✅ Backup is created (if no recent backup)
 - ✅ Update is applied normally
 
 ### Scenario 3: Person Not Home
@@ -616,8 +603,7 @@ This is a fork/modification of the original blueprint by [edwardtfn](https://git
 5. **Review Logs:** Check Home Assistant logbook after automation runs
 6. **Have Backups:** Always maintain external backups beyond the automation's built-in backup
 7. **Monitor Breaking Changes:** Review what updates were skipped and apply manually when ready
-8. **Use Helper Entity:** For better control and resume functionality
-9. **Schedule Wisely:** Choose low-usage time windows for updates
+8. **Schedule Wisely:** Choose low-usage time windows for updates
 
 ## ⚠️ Known Limitations
 
