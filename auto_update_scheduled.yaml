@@ -1191,6 +1191,7 @@ action:
                 seconds=temp_max_backup_age.seconds
               ).total_seconds()
             }}
+          skip_backup: false
       - alias: Check existing backup age using native HA backup entities
         continue_on_error: true
         if:
@@ -1227,6 +1228,17 @@ action:
                   - *logbook_update
                   - *send_notifications
                   - stop: "Last backup is too old"
+                else:
+                  - variables:
+                      skip_backup: true
+                      log_message: >
+                        Recent backup found ({{ last_backup_timestamp }}).
+                        Age: {{ ((as_timestamp(now()) - as_timestamp(last_backup_timestamp)) / 3600) | round(1) }}h
+                        (max allowed: {{ (input_max_backup_age_seconds / 3600) | round(1) }}h).
+                        Skipping backup creation.
+                      notification_event: "backup"
+                  - *logbook_update
+                  - *send_notifications
             else:
               - variables:
                   log_message: "No backup entity found"
@@ -1238,6 +1250,7 @@ action:
         continue_on_error: true
         if:
           - '{{ input_backup_bool }}'
+          - '{{ not skip_backup | default(false) }}'
           - condition: template
             value_template: >
               {# Create backup if NOT (recent backup exists OR already running) #}
@@ -1288,15 +1301,14 @@ action:
               - *logbook_update
               - *send_notifications
 
-              - alias: "Wait for backup completion using event-driven monitoring"
+              - alias: "Wait for backup completion"
                 continue_on_error: true
-                wait_for_trigger:
-                  - platform: state
-                    entity_id: sensor.backup_backup_manager_state
-                    from: create_backup
-                    to: idle
-                  - platform: state
-                    entity_id: sensor.backup_last_successful_automatic_backup
+                wait_template: >-
+                  {{
+                    states('sensor.backup_backup_manager_state') == 'idle' and
+                    as_timestamp(states('sensor.backup_last_successful_automatic_backup'))
+                      > as_timestamp(backup_start_time)
+                  }}
                 timeout:
                   minutes: '{{ input_backup_timeout | int(60) }}'
                 continue_on_timeout: true
@@ -1304,22 +1316,8 @@ action:
               - variables:
                   backup_completed: '{{ wait.completed | default(false) }}'
                   backup_duration_seconds: '{{ (now() - (backup_start_time | as_datetime)).total_seconds() | int(0) }}'
-                  backup_detection_method: >
-                    {% if wait.trigger is defined and wait.trigger.entity_id is defined %}
-                      {% if wait.trigger.entity_id == "sensor.backup_backup_manager_state" %}
-                        Backup manager state transition (create_backup → idle)
-                      {% elif wait.trigger.entity_id == "sensor.backup_last_successful_automatic_backup" %}
-                        Last successful backup update
-                      {% else %}
-                        {{ wait.trigger.entity_id }}
-                      {% endif %}
-                    {% else %}
-                      Timeout (backup may still be running)
-                    {% endif %}
                   log_message: >
-                    Backup {% if backup_completed %}completed successfully in {{ backup_duration_seconds }} seconds
-                    
-                    Detection method: {{ backup_detection_method }}{% else %}monitoring timeout reached ({{ input_backup_timeout | int(60) }} minutes, {{ backup_duration_seconds }} seconds elapsed), continuing anyway. The backup may still be running in the background{% endif %}.
+                    Backup {% if backup_completed %}completed successfully in {{ backup_duration_seconds }} seconds{% else %}monitoring timeout reached ({{ input_backup_timeout | int(60) }} minutes, {{ backup_duration_seconds }} seconds elapsed), continuing anyway. The backup may still be running in the background{% endif %}.
 
                     Continuing...
                   notification_event: "backup"
