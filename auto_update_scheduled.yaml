@@ -36,10 +36,21 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
-    **Current Version: v2026.2.3** - Improved AI release notes fallback for add-ons, firmware, and integrations without inline notes.
+    **Current Version: v2026.2.4** - Removed safeguard bypasses: Update-Remaining catch-all and post-reboot resume logic.
 
     <details>
     <summary>📋 Click to view version history and changelog</summary>
+
+    ## v2026.2.4
+
+    **Fixed:**
+    - Removed "Update - Remaining" catch-all section that bypassed version mode filtering, AI analysis, and processed_updates tracking
+    - Removed post-reboot resume logic that lost skip decisions across restarts
+    - Removed update_process_started_entity helper requirement (no longer needed)
+    - Simplified HA Start trigger - now performs clean re-evaluation without special resume logic
+    - Backup deduplication now relies solely on timestamp checking (sensor.backup_last_successful_automatic_backup)
+
+    **Impact:** All update safeguards (version mode, AI analysis, breaking change detection) now work consistently without bypass.
 
     ## v2026.2.3
 
@@ -740,22 +751,6 @@ blueprint:
           selector:
             boolean: {}
 
-        update_process_started_entity:
-          name: '"Update Process Started" Toggle Entity (optional)'
-          description: >
-            You can create a [Toggle Helper](https://www.home-assistant.io/integrations/input_boolean) under
-            [Settings > Devices & Services > Helpers](https://my.home-assistant.io/redirect/config_flow_start/?domain=input_boolean).
-
-            This entity will be used to determine if we still have to do a backup
-            on automation start - so it is for inner workings of this automation.
-
-            This saves you from getting multiple backups in the same update window.
-          default: []
-          selector:
-            entity:
-              multiple: false
-              domain: input_boolean
-
         update_timeout:
           name: Update Timeout
           description: |
@@ -795,7 +790,6 @@ trigger_variables:
   input_schedule_monthday_last: '{{ schedule_monthday_last | int(0) }}'
   input_update_inclusion_entity_list: !input update_inclusion_entity_list
   input_update_inclusion_entity_searchfilter: !input update_inclusion_entity_searchfilter
-  input_update_process_started_entity: !input update_process_started_entity
   input_person_home_entity: !input person_home_entity
 
 trigger:
@@ -854,10 +848,15 @@ condition:
         conditions:
           - condition: trigger
             id: "HA Start"
-          - '{{ input_update_process_started_entity | string | length > 0 }}'
-          - condition: state
-            entity_id: !input update_process_started_entity
-            state: "on"
+          - condition: template
+            value_template: >-
+              {{
+                states.update
+                | default([])
+                | selectattr("state", "eq", "on")
+                | rejectattr("entity_id", "in", input_update_exclusions | default([]))
+                | list | count | int(0) > 0
+              }}
 
   - condition: template
     value_template: >
@@ -914,11 +913,6 @@ variables:
       if (device_attr(u, 'identifiers') | first)[1] == 'supervisor' %}
         {{ u }}
     {% endfor %}
-  is_resume_after_restart: >
-    {{
-      input_update_process_started_entity | string | length > 0 and
-      is_state(input_update_process_started_entity, "on")
-    }}
   friendly_name: |
     {% set friendly_name_tmp = state_attr(this.entity_id, "friendly_name") | default("") %}
     {{
@@ -1280,14 +1274,13 @@ action:
           - '{{ not skip_backup | default(false) }}'
           - condition: template
             value_template: >
-              {# Create backup if NOT (recent backup exists OR already running) #}
-              {# In other words, skip backup if recent backup OR already running #}
+              {# Create backup if no recent backup exists #}
               {% set backup_sensor = states('sensor.backup_last_successful_automatic_backup') %}
               {% if backup_sensor not in ['unknown', 'unavailable', ''] %}
                 {% set has_recent_backup = (as_timestamp(now()) - as_timestamp(backup_sensor)) <= 3600 %}
-                {{ not (has_recent_backup or is_resume_after_restart) }}
+                {{ not has_recent_backup }}
               {% else %}
-                {{ not is_resume_after_restart }}
+                {{ true }}
               {% endif %}
         then:
           - if: '{{ input_whatif_mode }}'
@@ -1298,14 +1291,6 @@ action:
               - *logbook_update
               - *send_notifications
             else:
-              - alias: "Set helper entity to ON (if configured)"
-                if:
-                  - '{{ input_update_process_started_entity | string | length > 0 }}'
-                then:
-                  - action: input_boolean.turn_on
-                    target:
-                      entity_id: "{{ input_update_process_started_entity }}"
-                    continue_on_error: true
               - variables:
                   log_message: "Backing up Home Assistant"
                   notification_event: "backup"
@@ -1896,78 +1881,6 @@ action:
                 - *update_install
                 - *update_wait
 
-  - alias: Update - Remaining  # Update all remaining items => this chaches up if some update item was left behind
-    continue_on_error: true
-    if:
-      - '{{ is_there_anything_to_update }}'
-      - condition: state
-        entity_id: !input schedule_entity
-        state: 'on'
-    then:
-      - *recalc_update_list
-      - variables:
-          log_message: "Updating all remaining items (if any)"
-          notification_event: "update_progress"
-      - *logbook_update
-      - *send_notifications
-
-      - variables:
-          pre_install_remaining_versions: >-
-            {%- set ns = namespace(result={}) -%}
-            {%- for entity in states.update
-                | selectattr('state', 'eq', 'on')
-                | selectattr('entity_id', 'in', updates_pending)
-                | rejectattr('entity_id', 'in', input_update_exclusions)
-                | list -%}
-              {%- set ns.result = dict(ns.result, **{entity.entity_id: entity.attributes.installed_version | default('unknown')}) -%}
-            {%- endfor -%}
-            {{ ns.result }}
-
-      - alias: "Update - Remaining - Install"
-        continue_on_error: true
-        if: '{{ not input_whatif_mode }}'
-        then:
-          - service: update.install
-            data: {}
-            target:
-              entity_id: >-
-                {% set remaining = states.update
-                  | selectattr('state', 'eq', 'on')
-                  | selectattr('entity_id', 'in', updates_pending)
-                  | rejectattr('entity_id', 'in', input_update_exclusions)
-                  | list %}
-                {% if input_skip_breaking_changes %}
-                  {% set filtered = namespace(list=[]) %}
-                  {% for update in remaining %}
-                    {% set release_summary = state_attr(update.entity_id, 'release_summary') | default('') | lower %}
-                    {% set release_notes = state_attr(update.entity_id, 'release_notes') | default('') | lower %}
-                    {% set combined_text = release_summary ~ ' ' ~ release_notes %}
-                    {% if not ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) %}
-                      {% set filtered.list = filtered.list + [update.entity_id] %}
-                    {% endif %}
-                  {% endfor %}
-                  {{ filtered.list }}
-                {% else %}
-                  {{ remaining | map(attribute='entity_id') | list }}
-                {% endif %}
-      - alias: "Update - Remaining - Wait"
-        continue_on_error: true
-        wait_template: >-
-          {%- set remaining = states.update
-              | selectattr('state', 'eq', 'on')
-              | selectattr('entity_id', 'in', updates_pending)
-              | rejectattr('entity_id', 'in', input_update_exclusions)
-              | list -%}
-          {%- set ns = namespace(any_version_changed=false) -%}
-          {%- for eid, old_ver in pre_install_remaining_versions.items() -%}
-            {%- if state_attr(eid, 'installed_version') | default('unknown') != old_ver -%}
-              {%- set ns.any_version_changed = true -%}
-            {%- endif -%}
-          {%- endfor -%}
-          {{ remaining | count | int(0) < 1 or ns.any_version_changed }}
-        continue_on_timeout: true
-        timeout: !input update_timeout
-
   - alias: Finishing
     sequence:
       - *recalc_update_list
@@ -2135,14 +2048,6 @@ action:
       - alias: "Run post-update actions"
         continue_on_error: true
         sequence: !input actions_pos_update
-
-  - alias: Set OFF helper flag
-    if:
-      - '{{ input_update_process_started_entity | string | length > 0 }}'
-    then:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: !input update_process_started_entity
 
   - alias: Mobile notification summary
     if:
