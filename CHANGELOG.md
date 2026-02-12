@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project uses [Calendar Versioning](https://calver.org/) with the scheme `YYYY.MM.incremental`.
 
-**Note:** Detailed technical changelogs for each version are available in the [`changelogs/`](changelogs/) directory.
+**Note:** Detailed technical changelogs for each version are available in the [`changelogs/`](changelogs/) directory. Exact release dates for versions v2025.10.3–v2025.10.11 were not preserved; these versions were released during October 2025–February 2026.
 
 ## [v2026.2.1] - 2026-02-12
 
