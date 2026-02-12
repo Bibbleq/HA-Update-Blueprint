@@ -7,6 +7,15 @@ and this project uses [Calendar Versioning](https://calver.org/) with the scheme
 
 **Note:** Detailed technical changelogs for each version are available in the [`changelogs/`](changelogs/) directory. Exact release dates for versions v2025.10.3–v2025.10.11 were not preserved; these versions were released during October 2025–February 2026.
 
+## [v2026.2.2] - 2026-02-12
+
+### Fixed
+- Fixed `wait_template` for update completion never firing when a newer version is already available
+- When multiple versions are queued (e.g., HACS integrations), the update entity stays `on` after install, causing the automation to hang for the full timeout duration
+- Now detects completion by checking if `installed_version` changed, with fallback to state `off`
+- Improved "Update - Remaining - Wait" batch wait to also detect version changes
+- Enhanced success/error logging with version transition details (e.g., `v4.1.0 → v4.2.3`)
+
 ## [v2026.2.1] - 2026-02-12
 
 ### Changed
@@ -140,6 +149,7 @@ and this project uses [Calendar Versioning](https://calver.org/) with the scheme
 
 ---
 
+[v2026.2.2]: https://github.com/Bibbleq/HA-Blueprint-Auto-Update-On-A-Schedule/releases/tag/v2026.2.2
 [v2026.2.1]: https://github.com/Bibbleq/HA-Blueprint-Auto-Update-On-A-Schedule/releases/tag/v2026.2.1
 [v2025.10.11]: https://github.com/Bibbleq/HA-Blueprint-Auto-Update-On-A-Schedule/releases/tag/v2025.10.11
 [v2025.10.10]: https://github.com/Bibbleq/HA-Blueprint-Auto-Update-On-A-Schedule/releases/tag/v2025.10.10
