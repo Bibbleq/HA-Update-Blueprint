@@ -7,6 +7,18 @@ and this project uses [Calendar Versioning](https://calver.org/) with the scheme
 
 **Note:** Detailed technical changelogs for each version are available in the [`changelogs/`](changelogs/) directory. Exact release dates for versions v2025.10.3–v2025.10.11 were not preserved; these versions were released during October 2025–February 2026.
 
+## [v2026.2.3] - 2026-02-12
+
+### Fixed
+- Fixed AI analysis receiving literal "None" text when `release_summary` and `release_notes` attributes are null
+- Added multi-tier fallback for AI release notes prompt:
+  1. Use inline notes when available
+  2. Direct AI to fetch from `release_url` when populated (HACS, HA Core/OS)
+  3. Provide firmware-specific guidance for device firmware updates (Z-Wave, Zigbee, etc.)
+  4. Ask AI to search the web for add-ons and integrations with no notes or URL
+- Removed condition requiring inline release notes to be present before calling AI agent
+- Properly guard against `None` string values in release notes concatenation
+
 ## [v2026.2.2] - 2026-02-12
 
 ### Fixed
