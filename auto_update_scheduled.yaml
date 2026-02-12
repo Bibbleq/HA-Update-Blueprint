@@ -1090,7 +1090,7 @@ action:
   - alias: Preparation  # Inform logbook and telegram which update automation is running
     sequence:
       - variables:
-          log_message: '{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}{{ friendly_name }} is {{ "re" if is_resume_after_restart else ""}}starting'
+          log_message: '{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}{{ friendly_name }} is starting'
           notification_event: "starting"
       - &logbook_update
         if: "{{ input_verbose_logging_bool }}"
@@ -1164,7 +1164,6 @@ action:
   - alias: Pre-update actions
     if:
       - '{{ is_there_anything_to_update }}'
-      - '{{ not is_resume_after_restart }}'
       - condition: state
         entity_id: !input schedule_entity
         state: 'on'
@@ -1192,7 +1191,6 @@ action:
   - alias: Backup
     if:
       - '{{ is_there_anything_to_update }}'
-      - '{{ not is_resume_after_restart }}'
       - condition: state
         entity_id: !input schedule_entity
         state: 'on'
