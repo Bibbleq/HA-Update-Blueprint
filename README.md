@@ -5,7 +5,16 @@
 
 A powerful and safe Home Assistant blueprint that automatically updates Home Assistant Core, OS, add-ons, and integrations on a scheduled basis with intelligent safety features.
 
-## 🎉 Latest Update - v2025.10.11
+## 🎉 Latest Update - v2026.2.1
+
+**Versioning Correction and Repository Cleanup:**
+- **Calendar Versioning:** Corrected to proper CalVer format (YYYY.MM.incremental)
+- **Repository Organization:** Moved documentation files to `docs/` directory
+- **Consolidated Changelog:** Added root `CHANGELOG.md` following Keep a Changelog format
+
+**Note:** Previous versions (v2025.10.3–v2025.10.11) used a non-resetting incremental counter. Going forward, the incremental resets each calendar month.
+
+## Previous Update - v2025.10.11
 
 **Improved Backup Deduplication:**
 - **Smart Timestamp Checking:** Enhanced backup creation logic to check actual backup timestamps
@@ -338,7 +347,31 @@ notification_mobile_device: mobile_app_my_phone
 
 ## 📋 Version History
 
-### v2025.10.10 (Current)
+For a complete version history, see [CHANGELOG.md](CHANGELOG.md) in the repository root.
+
+### v2026.2.1 (Current)
+
+**✅ Versioning Correction and Repository Cleanup:**
+- Corrected to proper Calendar Versioning format (YYYY.MM.incremental)
+- Moved documentation files to `docs/` directory
+- Added consolidated `CHANGELOG.md` following Keep a Changelog format
+
+**Note:** Previous versions (v2025.10.3–v2025.10.11) used a non-resetting incremental counter. Going forward, the incremental resets each calendar month.
+
+### v2025.10.11
+
+**🔧 Improved Backup Deduplication:**
+- Enhanced backup creation logic to check actual backup timestamps
+- Prevents duplicate backups within 1 hour, regardless of source
+- Respects backups created by any process, not just this automation
+- Helper entity now truly optional (only used for resume-after-restart detection)
+- Uses `sensor.backup_last_successful_automatic_backup` for timestamp checking
+
+**Impact:**
+- ✅ More reliable backup management with better deduplication
+- ✅ Reduced storage usage
+
+### v2025.10.10
 
 **🔧 Fixed Backup Age Check for Modern HA:**
 - Fixed "No backup entity with last_backup attribute found" error
@@ -554,7 +587,7 @@ All changes maintain backward compatibility except for the `skip_breaking_change
 - ✅ If AI responds with "SAFE", update proceeds normally
 - ✅ Keyword-based detection still works alongside AI
 
-For more detailed test scenarios and debugging guides, see [TESTING.md](TESTING.md).
+For more detailed test scenarios and debugging guides, see [TESTING.md](docs/TESTING.md).
 
 ## 🤝 Contributing
 
@@ -571,7 +604,7 @@ This is a fork/modification of the original blueprint by [edwardtfn](https://git
 
 ## 📚 Additional Documentation
 
-- [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Detailed technical implementation
+- [docs/](docs/) - Additional documentation files
 - [changelogs/](changelogs/) - Version changelogs and release notes
 
 ## 💡 Tips & Best Practices
@@ -614,4 +647,4 @@ If you find this blueprint useful, consider supporting the original author:
 
 ---
 
-**Last Updated:** February 2026 (v2025.10.9)
+**Last Updated:** February 2026 (v2026.2.1)

@@ -36,10 +36,20 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
-    **Current Version: v2025.10.11** - Improved backup deduplication using timestamp checking.
+    **Current Version: v2026.2.1** - Versioning correction and repository cleanup.
 
     <details>
     <summary>📋 Click to view version history and changelog</summary>
+
+    ## v2026.2.1
+
+    **Versioning Correction:**
+    - Corrected Calendar Versioning format (YYYY.MM.incremental)
+    - Previous versions used non-resetting incremental counter
+    - Repository cleanup: moved documentation to `docs/` directory
+    - Added consolidated root `CHANGELOG.md`
+
+    **Impact:** Proper CalVer versioning going forward with incremental reset each month.
 
     ## v2025.10.11
 
