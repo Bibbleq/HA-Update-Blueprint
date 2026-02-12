@@ -1272,7 +1272,8 @@ action:
           - '{{ not skip_backup | default(false) }}'
           - condition: template
             value_template: >
-              {# Create backup if no recent backup exists #}
+              {# Create backup if no recent backup exists (within last hour) #}
+              {# Checks sensor.backup_last_successful_automatic_backup timestamp #}
               {% set backup_sensor = states('sensor.backup_last_successful_automatic_backup') %}
               {% if backup_sensor not in ['unknown', 'unavailable', ''] %}
                 {% set has_recent_backup = (as_timestamp(now()) - as_timestamp(backup_sensor)) <= 3600 %}

@@ -23,6 +23,8 @@ A powerful and safe Home Assistant blueprint that automatically updates Home Ass
 - **Simplified Architecture:** Removed resume-after-restart logic for cleaner, more reliable operation
 - **Modern HA Support:** Uses `sensor.backup_last_successful_automatic_backup` for timestamp checking
 
+**Migration Note:** If you previously configured `update_process_started_entity` helper, you can safely remove it from your automation configuration and delete the helper entity. The automation now operates in a stateless manner, re-evaluating all updates with full safeguards after any restart.
+
 **Impact:** More reliable backup management with better deduplication and reduced storage usage.
 
 ## Previous Update - v2025.10.10
