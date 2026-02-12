@@ -36,10 +36,19 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
-    **Current Version: v2026.2.1** - Versioning correction and repository cleanup.
+    **Current Version: v2026.2.2** - Fix update completion detection for multi-version scenarios.
 
     <details>
     <summary>📋 Click to view version history and changelog</summary>
+
+    ## v2026.2.2
+
+    **Fixed:**
+    - Fixed `wait_template` for update completion never firing when a newer version is already available
+    - When multiple versions are queued, the update entity stays `on` after install (never reaches `off`)
+    - Now detects completion by checking if `installed_version` changed, with fallback to state `off`
+    - Improved "Update - Remaining - Wait" to also detect version changes for batch updates
+    - Enhanced success/error logging with version transition details (e.g., `v4.1.0 → v4.2.3`)
 
     ## v2026.2.1
 
@@ -1538,6 +1547,10 @@ action:
                     - *logbook_update
                     - *send_notifications
 
+                - variables:
+                    pre_install_version: >
+                      {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
+
                 - &update_install
                   alias: "Update - Install"
                   if: '{{ not input_whatif_mode }}'
@@ -1563,13 +1576,20 @@ action:
                       else:
                         - alias: Wait
                           continue_on_error: true
-                          wait_template: "{{ is_state(current_update_entity, 'off') }}"
+                          wait_template: >
+                            {{
+                              state_attr(current_update_entity, 'installed_version')
+                                != pre_install_version
+                              or is_state(current_update_entity, 'off')
+                            }}
                           continue_on_timeout: true
                           timeout: !input update_timeout
                         - if: '{{ wait.completed }}'
                           then:
                             - variables:
-                                log_message: '`{{ current_update_entity_friendly_name }}` updated successfuly'
+                                log_message: >
+                                  `{{ current_update_entity_friendly_name }}` updated successfully
+                                  ({{ pre_install_version }} → {{ state_attr(current_update_entity, 'installed_version') }})
                                 applied_updates: '{{ applied_updates + [current_update_entity_friendly_name] }}'
                                 processed_updates: '{{ processed_updates + [current_update_entity] }}'
                                 notification_event: "update_progress"
@@ -1577,7 +1597,10 @@ action:
                             - *send_notifications
                           else:
                             - variables:
-                                log_message: 'ERROR: `{{ current_update_entity_friendly_name }}` update timed out'
+                                log_message: >
+                                  ERROR: `{{ current_update_entity_friendly_name }}` update timed out
+                                  (still on {{ state_attr(current_update_entity, 'installed_version') }},
+                                  expected change from {{ pre_install_version }})
                                 processed_updates: '{{ processed_updates + [current_update_entity] }}'
                                 notification_event: "update_progress"
                             - *logbook_update
@@ -1640,6 +1663,9 @@ action:
             - if: '{{ not has_breaking_changes }}'
               then:
                 - *log_updating
+                - variables:
+                    pre_install_version: >
+                      {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                 - *update_install
                 - *update_wait
 
@@ -1738,6 +1764,9 @@ action:
             - if: '{{ not has_breaking_changes }}'
               then:
                 - *log_updating
+                - variables:
+                    pre_install_version: >
+                      {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                 - *update_install
                 - *update_wait
 
@@ -1836,6 +1865,9 @@ action:
             - if: '{{ not has_breaking_changes }}'
               then:
                 - *log_updating
+                - variables:
+                    pre_install_version: >
+                      {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                 - *update_install
                 - *update_wait
 
@@ -1853,6 +1885,18 @@ action:
           notification_event: "update_progress"
       - *logbook_update
       - *send_notifications
+
+      - variables:
+          pre_install_remaining_versions: >-
+            {%- set ns = namespace(result={}) -%}
+            {%- for entity in states.update
+                | selectattr('state', 'eq', 'on')
+                | selectattr('entity_id', 'in', updates_pending)
+                | rejectattr('entity_id', 'in', input_update_exclusions)
+                | list -%}
+              {%- set ns.result = dict(ns.result, **{entity.entity_id: entity.attributes.installed_version | default('unknown')}) -%}
+            {%- endfor -%}
+            {{ ns.result }}
 
       - alias: "Update - Remaining - Install"
         continue_on_error: true
@@ -1884,17 +1928,18 @@ action:
       - alias: "Update - Remaining - Wait"
         continue_on_error: true
         wait_template: >-
-          {{
-            (
-              states.update
+          {%- set remaining = states.update
               | selectattr('state', 'eq', 'on')
               | selectattr('entity_id', 'in', updates_pending)
               | rejectattr('entity_id', 'in', input_update_exclusions)
-              | list
-              | count
-              | int(0)
-            ) < 1
-          }}
+              | list -%}
+          {%- set ns = namespace(any_version_changed=false) -%}
+          {%- for eid, old_ver in pre_install_remaining_versions.items() -%}
+            {%- if state_attr(eid, 'installed_version') | default('unknown') != old_ver -%}
+              {%- set ns.any_version_changed = true -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ remaining | count | int(0) < 1 or ns.any_version_changed }}
         continue_on_timeout: true
         timeout: !input update_timeout
 
