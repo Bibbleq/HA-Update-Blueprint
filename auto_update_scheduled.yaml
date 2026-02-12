@@ -36,10 +36,18 @@ blueprint:
 
     Update Home Assistant automatically when a new update is available.
 
-    **Current Version: v2026.2.2** - Fix update completion detection for multi-version scenarios.
+    **Current Version: v2026.2.3** - Improved AI release notes fallback for add-ons, firmware, and integrations without inline notes.
 
     <details>
     <summary>📋 Click to view version history and changelog</summary>
+
+    ## v2026.2.3
+
+    **Fixed:**
+    - Fixed AI analysis receiving literal "None" text when release notes are unavailable
+    - Added multi-tier fallback for AI release notes: inline notes → release URL → firmware guidance → web search
+    - AI can now analyze add-on, firmware, and non-HACS integration updates that lack inline release notes
+    - Properly handle `None` values in `release_summary` and `release_notes` attributes
 
     ## v2026.2.2
 
@@ -1404,16 +1412,24 @@ action:
                   {% set combined_text = release_summary ~ ' ' ~ release_notes %}
                   {{ input_skip_breaking_changes and ('breaking change' in combined_text or 'breaking-change' in combined_text or 'breaking changes' in combined_text) }}
                 release_notes_for_ai: >
-                  {% set release_summary = state_attr(current_update_entity, 'release_summary') | default('') %}
-                  {% set release_notes = state_attr(current_update_entity, 'release_notes') | default('') %}
+                  {% set rs = state_attr(current_update_entity, 'release_summary') %}
+                  {% set rn = state_attr(current_update_entity, 'release_notes') %}
+                  {% set release_summary = (rs if rs is not none else '') | string | trim %}
+                  {% set release_notes = (rn if rn is not none else '') | string | trim %}
+                  {% if release_summary | length > 0 and release_notes | length > 0 %}
                   {{ release_summary ~ '\n\n' ~ release_notes }}
+                  {% elif release_summary | length > 0 %}
+                  {{ release_summary }}
+                  {% elif release_notes | length > 0 %}
+                  {{ release_notes }}
+                  {% endif %}
                 # Reset AI-related variables at start of each update check to prevent carryover
                 ai_has_concern: false
                 ai_concern_reason: ""
 
             - &check_ai_breaking_changes
               alias: "Check AI for breaking changes"
-              if: '{{ input_ai_analysis_enabled and not has_keyword_breaking_changes and release_notes_for_ai | trim | length > 0 }}'
+              if: '{{ input_ai_analysis_enabled and not has_keyword_breaking_changes }}'
               then:
                 - variables:
                     log_message: "{% if input_whatif_mode %}[WHAT-IF MODE] {% endif %}Analyzing release notes with AI for `{{ current_update_entity_friendly_name }}`..."
@@ -1436,22 +1452,31 @@ action:
                       UPDATE: {{ current_update_entity_friendly_name }}
                       CURRENT VERSION: {{ state_attr(current_update_entity, 'installed_version') | default('unknown') }}
                       NEW VERSION: {{ state_attr(current_update_entity, 'latest_version') | default(state_attr(current_update_entity, 'available_version')) | default('unknown') }}
+                      {% set notes = (release_notes_for_ai if release_notes_for_ai else '') | string | trim %}
+                      {% set has_notes = notes | length > 0 and notes not in ['None', 'None\n\nNone', 'None None'] %}
                       {% set release_url_raw = state_attr(current_update_entity, 'release_url') %}
-                      {% set release_url = (release_url_raw if release_url_raw else '') | string %}
+                      {% set release_url = (release_url_raw if release_url_raw else '') | string | trim %}
+                      {% set device_class = state_attr(current_update_entity, 'device_class') | default('') %}
+                      {% set update_name = current_update_entity_friendly_name
+                          | replace(' Update', '') | replace(' update', '')
+                          | replace(' Firmware', '') | replace(' firmware', '') %}
                       {% if release_url | length > 0 %}
                       RELEASE URL: {{ release_url }}
                       {% endif %}
                       
-                      {% set notes = (release_notes_for_ai if release_notes_for_ai else '') | string | trim %}
-                      {% if notes | length > 0 %}
+                      {% if has_notes %}
                       RELEASE NOTES (from Home Assistant):
                       {{ notes }}
+                      {% elif release_url | length > 0 %}
+                      RELEASE NOTES: Not available inline. Please fetch and analyze the release notes from this URL: {{ release_url }}
+                      {% elif device_class == 'firmware' %}
+                      RELEASE NOTES: Not available. This is a device firmware update for "{{ update_name }}". Firmware updates for smart home devices rarely contain breaking changes to Home Assistant. Assess based on the version number change alone ({{ state_attr(current_update_entity, 'installed_version') | default('unknown') }} → {{ state_attr(current_update_entity, 'latest_version') | default('unknown') }}). If this is a minor or patch version change, it is likely safe.
                       {% else %}
-                      RELEASE NOTES: Not available in Home Assistant. Please check the release URL above if provided.
+                      RELEASE NOTES: Not available inline and no release URL provided. This appears to be a Home Assistant add-on or integration called "{{ update_name }}". Please search the web for "{{ update_name }}" version {{ state_attr(current_update_entity, 'latest_version') | default('unknown') }} changelog, release notes, or GitHub releases page, then analyze what you find.
                       {% endif %}
                       
                       INSTRUCTIONS:
-                      1. If a release URL is provided and release notes are not available, please fetch and analyze the release notes from that URL.
+                      1. If a release URL is provided and release notes are not available inline, please fetch and analyze the release notes from that URL.
                       2. Look for breaking changes, deprecations, or changes that require manual intervention.
                       3. Consider the user's environment context when evaluating impact.
                       
